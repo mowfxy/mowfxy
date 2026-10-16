@@ -20,9 +20,9 @@ SANS_DIR = os.environ.get("MOWAFY_SANS", os.path.join(HERE, "../../sans/fonts/tt
 
 THEMES = {
     "light": dict(ink="#1C1B18", soft="#55514A", mute="#8A847A", rule="#DDD8CE", accent="#B4532F",
-                  warm="#E2A15A", rose="#D9817A", glow=.26),
+                  dot="#B4532F"),
     "dark": dict(ink="#EEEAE2", soft="#B9B3A8", mute="#857F75", rule="#2C2A27", accent="#E0805A",
-                 warm="#C98A3E", rose="#B85C55", glow=.34),
+                 dot="#E0805A"),
 }
 W = 1000
 
@@ -159,36 +159,37 @@ def rosette(cx, cy, R, r, d, turns, steps=2400):
     return "M" + " L".join(pts) + "Z"
 
 
-def ambient(c, h, blobs, key):
-    """Soft light drifting behind the content. Radial gradients fade to nothing,
-    so it blends into whatever GitHub theme sits around it."""
-    defs, shapes, css = [], [], []
-    for i, (x, y, rx, ry, col, op, dx, dy, dur) in enumerate(blobs):
-        gid = f"{key}{i}"
-        defs.append(f'<radialGradient id="{gid}"><stop offset="0" stop-color="{col}" stop-opacity="{op}"/>'
-                    f'<stop offset=".45" stop-color="{col}" stop-opacity="{op*0.45:.3f}"/>'
-                    f'<stop offset="1" stop-color="{col}" stop-opacity="0"/></radialGradient>')
-        shapes.append(f'<ellipse cx="{x}" cy="{y}" rx="{rx}" ry="{ry}" fill="url(#{gid})" '
-                      f'style="animation:{gid} {dur}s ease-in-out infinite alternate"/>')
-        css.append(f"@keyframes {gid}{{from{{transform:translate(0,0)}}to{{transform:translate({dx}px,{dy}px)}}}}")
-    # feather every edge so the light never shows a hard border
-    defs.append(f'<linearGradient id="{key}fx"><stop offset="0" stop-color="#000"/><stop offset=".22" stop-color="#fff"/>'
-                f'<stop offset=".78" stop-color="#fff"/><stop offset="1" stop-color="#000"/></linearGradient>'
-                f'<linearGradient id="{key}fy" x2="0" y2="1"><stop offset="0" stop-color="#000"/><stop offset=".25" stop-color="#fff"/>'
-                f'<stop offset=".75" stop-color="#fff"/><stop offset="1" stop-color="#000"/></linearGradient>'
-                f'<mask id="{key}my"><rect width="{W}" height="{h}" fill="url(#{key}fy)"/></mask>'
-                f'<mask id="{key}m"><rect width="{W}" height="{h}" fill="url(#{key}fx)" mask="url(#{key}my)"/></mask>')
-    return f'<defs>{"".join(defs)}</defs><g mask="url(#{key}m)">{"".join(shapes)}</g>', "".join(css)
+def dots(c, h, key, cx, cy, reach, step=20, rmax=3.3, wave=7.0):
+    """A halftone field of fine dots. Dots grow toward (cx, cy) and fade out
+    with distance; a slow diagonal wave brightens and dims them in turn."""
+    bands = {}
+    for j in range(int(h / step) + 1):
+        for i in range(int(W / step) + 1):
+            x = i * step + (step / 2 if j % 2 else 0)
+            y = j * step + step / 2
+            dist = math.hypot((x - cx) / 1.25, y - cy) / reach
+            if dist >= 1:
+                continue
+            f = (1 - dist) ** 1.6
+            # also fade near the image edges
+            edge = min(x, W - x, y, h - y) / 60
+            f *= min(1, max(0, edge))
+            r = rmax * (0.35 + 0.65 * f)
+            if f < 0.04:
+                continue
+            band = (i + j) // 2
+            bands.setdefault(band, []).append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{r:.2f}" opacity="{f:.2f}"/>')
+    n = max(bands) + 1
+    groups = "".join(
+        f'<g style="animation-delay:{-wave * (n - b) / n * 2:.2f}s">{"".join(v)}</g>' for b, v in sorted(bands.items()))
+    css = (f"@keyframes {key}w{{0%,100%{{opacity:.25}}50%{{opacity:1}}}}"
+           f".{key} g{{animation:{key}w {wave}s ease-in-out infinite}}")
+    return f'<g class="{key}" fill="{c["dot"]}">{groups}</g>', css
 
 
 def hero(c):
     H = 560
-    k = c["glow"]
-    bg, css = ambient(c, H, [
-        (700, 240, 300, 210, c["accent"], k, -200, 40, 23),
-        (420, 300, 260, 180, c["warm"], k * 0.8, 220, -40, 29),
-        (820, 360, 220, 150, c["rose"], k * 0.7, -150, -80, 19),
-    ], "h")
+    bg, css = dots(c, H, "h", 820, 250, 520)
     b = [bg]
     b.append(caps("Mohamed Mowafy  ·  Cairo", 17, 0, 52, c["mute"]))
     b.append(t(SERIF_LIGHT, "Mohamed", 136, -5, 200, c["ink"], ls=-2.5))
@@ -245,11 +246,7 @@ def row(num, title, desc, kind, c):
 # ---------------------------------------------------------------- sign-off (animated dot)
 def footer(c):
     H = 220
-    k = c["glow"]
-    bg, css = ambient(c, H, [
-        (300, 110, 340, 120, c["accent"], k * 0.75, 260, 10, 27),
-        (720, 120, 300, 110, c["warm"], k * 0.6, -240, -10, 21),
-    ], "f")
+    bg, css = dots(c, H, "f", 900, 110, 380, rmax=2.6)
     b = [bg, t(SERIF_LIGHT, "Thanks for stopping by.", 54, 0, 104, c["ink"], ls=-.8)]
     b.append(f'<circle cx="7" cy="160" r="5" fill="{c["accent"]}"/>')
     b.append(t(SANS, "Currently building Mowr", 22, 26, 168, c["soft"]))
