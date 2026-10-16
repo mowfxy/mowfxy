@@ -159,15 +159,14 @@ def rosette(cx, cy, R, r, d, turns, steps=2400):
     return "M" + " L".join(pts) + "Z"
 
 
-CODE = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghkmnpqrstuvwxyz0123456789{}<>/=+#"
+CODE = "{}<>/;=01()[]#*+_"
 
 
 def dots(c, h, key, cx, cy, reach, step=20, rmax=3.3, wave=9.0):
-    """A halftone field of fine dots and code characters.
+    """A halftone field of fine dots with code symbols scattered through it.
 
     Dots grow toward (cx, cy) and dissolve with distance. A soft diagonal wave
-    brightens and dims the field continuously, and some points slowly crossfade
-    between a dot and a character, as if the field were decoding."""
+    brightens and dims the field continuously."""
     cells = []
     for j in range(int(h / step) + 1):
         for i in range(int(W / step) + 1):
@@ -183,12 +182,10 @@ def dots(c, h, key, cx, cy, reach, step=20, rmax=3.3, wave=9.0):
             rnd = ((i * 7919 + j * 104729) % 9973) / 9973  # stable pseudo-random per cell
             r = rmax * (0.35 + 0.65 * f)
             dot = f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{r:.2f}"/>'
-            if f > 0.22 and rnd < 0.3:
+            if f > 0.28 and rnd < 0.2:  # about one point in five, only where the field is dense
                 ch = CODE[int(rnd * 1000) % len(CODE)]
                 glyph = SANS_MED.uses(ch, step * 0.6, x, y + step * 0.21, "middle")
-                d = -(((i * 37 + j * 61) % 101) / 101) * 3 * wave  # independent timing per point
-                el = (f'<g opacity="{f:.2f}"><g class="{key}d" style="animation-delay:{d:.2f}s">{dot}</g>'
-                      f'<g class="{key}c" style="animation-delay:{d:.2f}s">{glyph}</g></g>')
+                el = f'<g opacity="{min(1, f * 1.15):.2f}">{glyph}</g>'
             else:
                 el = dot.replace("/>", f' opacity="{f:.2f}"/>')
             cells.append((i + j, el))
@@ -202,10 +199,7 @@ def dots(c, h, key, cx, cy, reach, step=20, rmax=3.3, wave=9.0):
                      for b, v in sorted(bands.items()))
     css = (f"@keyframes {key}w{{0%,100%{{opacity:.3}}50%{{opacity:1}}}}"
            f".{key}w{{animation:{key}w {wave}s cubic-bezier(.45,0,.55,1) infinite}}"
-           f"@keyframes {key}d{{0%,30%,100%{{opacity:1}}45%,85%{{opacity:0}}}}"
-           f"@keyframes {key}c{{0%,30%,100%{{opacity:0}}45%,85%{{opacity:1}}}}"
-           f".{key}d{{animation:{key}d {wave*3}s cubic-bezier(.45,0,.55,1) infinite}}"
-           f".{key}c{{opacity:0;animation:{key}c {wave*3}s cubic-bezier(.45,0,.55,1) infinite}}")
+           )
     return f'<g opacity="{c["field"]}" fill="{c["dot"]}">{groups}</g>', css
 
 
