@@ -159,13 +159,16 @@ def rosette(cx, cy, R, r, d, turns, steps=2400):
     return "M" + " L".join(pts) + "Z"
 
 
-CODE = "{}<>/;=01()[]#*+_"
+CODE = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghkmnpqrstuvwxyz0123456789{}<>/=+#"
 
 
-def dots(c, h, key, cx, cy, reach, step=20, rmax=3.3, wave=7.0):
-    """A halftone field of fine dots. Dots grow toward (cx, cy) and fade out
-    with distance; a slow diagonal wave brightens and dims them in turn."""
-    bands = {}
+def dots(c, h, key, cx, cy, reach, step=20, rmax=3.3, wave=9.0):
+    """A halftone field of fine dots and code characters.
+
+    Dots grow toward (cx, cy) and dissolve with distance. A soft diagonal wave
+    brightens and dims the field continuously, and some points slowly crossfade
+    between a dot and a character, as if the field were decoding."""
+    cells = []
     for j in range(int(h / step) + 1):
         for i in range(int(W / step) + 1):
             x = i * step + (step / 2 if j % 2 else 0)
@@ -174,27 +177,36 @@ def dots(c, h, key, cx, cy, reach, step=20, rmax=3.3, wave=7.0):
             if dist >= 1:
                 continue
             f = (1 - dist) ** 1.6
-            # also fade near the image edges
-            edge = min(x, W - x, y, h - y) / 60
-            f *= min(1, max(0, edge))
-            r = rmax * (0.35 + 0.65 * f)
+            f *= min(1, max(0, min(x, W - x, y, h - y) / 60))  # fade at the image edges
             if f < 0.04:
                 continue
-            band = (i + j) // 2
-            h_ = (i * 7919 + j * 104729) % 1000 / 1000  # stable pseudo-random per cell
-            if h_ < 0.2 and f > 0.28:  # about one cell in five, only where the field is dense
-                ch = CODE[int(h_ * 5 * len(CODE)) % len(CODE)]
-                el = (f'<g opacity="{min(1, f * 1.15):.2f}">'
-                      f'{SANS_MED.uses(ch, step * 0.62, x, y + step * 0.22, "middle")}</g>')
+            rnd = ((i * 7919 + j * 104729) % 9973) / 9973  # stable pseudo-random per cell
+            r = rmax * (0.35 + 0.65 * f)
+            dot = f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{r:.2f}"/>'
+            if f > 0.22 and rnd < 0.3:
+                ch = CODE[int(rnd * 1000) % len(CODE)]
+                glyph = SANS_MED.uses(ch, step * 0.6, x, y + step * 0.21, "middle")
+                d = -(((i * 37 + j * 61) % 101) / 101) * 3 * wave  # independent timing per point
+                el = (f'<g opacity="{f:.2f}"><g class="{key}d" style="animation-delay:{d:.2f}s">{dot}</g>'
+                      f'<g class="{key}c" style="animation-delay:{d:.2f}s">{glyph}</g></g>')
             else:
-                el = f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{r:.2f}" opacity="{f:.2f}"/>'
-            bands.setdefault(band, []).append(el)
-    n = max(bands) + 1
-    groups = "".join(
-        f'<g style="animation-delay:{-wave * (n - b) / n * 2:.2f}s">{"".join(v)}</g>' for b, v in sorted(bands.items()))
-    css = (f"@keyframes {key}w{{0%,100%{{opacity:.25}}50%{{opacity:1}}}}"
-           f".{key} g{{animation:{key}w {wave}s ease-in-out infinite}}")
-    return f'<g opacity="{c["field"]}"><g class="{key}" fill="{c["dot"]}">{groups}</g></g>', css
+                el = dot.replace("/>", f' opacity="{f:.2f}"/>')
+            cells.append((i + j, el))
+
+    # one group per diagonal, each a little behind the last: a continuous wave
+    bands = {}
+    for b, el in cells:
+        bands.setdefault(b, []).append(el)
+    span = 46  # diagonals per wavelength
+    groups = "".join(f'<g class="{key}w" style="animation-delay:{-wave * (b % span) / span:.2f}s">{"".join(v)}</g>'
+                     for b, v in sorted(bands.items()))
+    css = (f"@keyframes {key}w{{0%,100%{{opacity:.3}}50%{{opacity:1}}}}"
+           f".{key}w{{animation:{key}w {wave}s cubic-bezier(.45,0,.55,1) infinite}}"
+           f"@keyframes {key}d{{0%,30%,100%{{opacity:1}}45%,85%{{opacity:0}}}}"
+           f"@keyframes {key}c{{0%,30%,100%{{opacity:0}}45%,85%{{opacity:1}}}}"
+           f".{key}d{{animation:{key}d {wave*3}s cubic-bezier(.45,0,.55,1) infinite}}"
+           f".{key}c{{opacity:0;animation:{key}c {wave*3}s cubic-bezier(.45,0,.55,1) infinite}}")
+    return f'<g opacity="{c["field"]}" fill="{c["dot"]}">{groups}</g>', css
 
 
 def hero(c):
