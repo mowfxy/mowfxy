@@ -1,32 +1,24 @@
-<p align="center">
-  <img src="assets/hero.svg" alt="Mohamed Mowafy — electronics engineering student at GUC, building Mowr and open-source agent skills" width="100%">
+<picture><source media="(prefers-color-scheme: dark)" srcset="assets/hero-dark.svg"><img src="assets/hero-light.svg" alt="Mohamed Mowafy — electronics engineering student at GUC, building Mowr and open-source agent skills" width="100%"></picture>
+
+<p>
+  <a href="https://mohamedmowafy.com"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/link-site-dark.svg"><img src="assets/link-site-light.svg" alt="Website: mohamedmowafy.com" height="40"></picture></a>
+  <a href="https://mowrai.com"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/link-mowr-dark.svg"><img src="assets/link-mowr-light.svg" alt="Mowr: mowrai.com" height="40"></picture></a>
+  <a href="https://github.com/mowfxy/mowr-releases/releases"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/link-download-dark.svg"><img src="assets/link-download-light.svg" alt="Download Mowr for Windows" height="40"></picture></a>
 </p>
 
-<p align="center">
-  <a href="https://mohamedmowafy.com"><img src="assets/btn-site.svg" alt="Website: mohamedmowafy.com" height="56"></a>
-  <a href="https://mowrai.com"><img src="assets/btn-mowr.svg" alt="Mowr: mowrai.com" height="56"></a>
-  <a href="https://github.com/mowfxy/mowr-releases/releases"><img src="assets/btn-download.svg" alt="Download Mowr for Windows" height="56"></a>
-</p>
+<br>
 
-<p align="center">
-  <img src="assets/scope.svg" alt="" width="100%">
-</p>
+<picture><source media="(prefers-color-scheme: dark)" srcset="assets/section-dark.svg"><img src="assets/section-light.svg" alt="Selected work" width="100%"></picture>
 
-<p align="center">
-  <a href="https://github.com/mowfxy/mowr-releases"><img src="assets/card-mowr.svg" alt="Mowr — a local-first AI workspace for Windows" width="49%"></a>
-  <a href="https://github.com/mowfxy/blend"><img src="assets/card-blend.svg" alt="Blend — eleven coordinated frontend skills for coding agents" width="49%"></a>
-  <a href="https://github.com/mowfxy/anti-slop"><img src="assets/card-anti-slop.svg" alt="anti-slop — makes agents finish the details" width="49%"></a>
-  <a href="https://github.com/mowfxy/web-perf"><img src="assets/card-web-perf.svg" alt="Web Perf — measured web performance work for agents" width="49%"></a>
-  <a href="https://github.com/mowfxy/cl-repo"><img src="assets/card-repo-tidier.svg" alt="Repo Tidier — cleans repositories without changing behavior" width="49%"></a>
-  <a href="https://github.com/mowfxy/kinetra"><img src="assets/card-kinetra.svg" alt="Kinetra — physics and circuit diagrams from JSON" width="49%"></a>
-</p>
+<a href="https://github.com/mowfxy/mowr-releases"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/work-mowr-dark.svg"><img src="assets/work-mowr-light.svg" alt="Mowr: A local-first AI workspace for Windows. Chats and files stay on your machine." width="100%"></picture></a>
+<a href="https://github.com/mowfxy/blend"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/work-blend-dark.svg"><img src="assets/work-blend-light.svg" alt="Blend: Eleven coordinated frontend skills that give coding agents real design taste." width="100%"></picture></a>
+<a href="https://github.com/mowfxy/anti-slop"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/work-anti-slop-dark.svg"><img src="assets/work-anti-slop-light.svg" alt="anti-slop: Makes agents finish the details: working forms, accessibility, mobile, metadata." width="100%"></picture></a>
+<a href="https://github.com/mowfxy/web-perf"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/work-web-perf-dark.svg"><img src="assets/work-web-perf-light.svg" alt="Web Perf: Measure first, fix the real bottleneck, keep Core Web Vitals from slipping." width="100%"></picture></a>
+<a href="https://github.com/mowfxy/cl-repo"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/work-repo-tidier-dark.svg"><img src="assets/work-repo-tidier-light.svg" alt="Repo Tidier: Turns a messy repository into a clean project without changing how it behaves." width="100%"></picture></a>
+<a href="https://github.com/mowfxy/kinetra"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/work-kinetra-dark.svg"><img src="assets/work-kinetra-light.svg" alt="Kinetra: A TypeScript workbench that renders physics and circuit diagrams from JSON." width="100%"></picture></a>
 
-<p align="center">
-  <img src="assets/stack.svg" alt="Toolchain: TypeScript, Python, Node.js, HTML/CSS, SVG, Codex" width="100%">
-</p>
+<br>
 
-<p align="center">
-  <img src="assets/footer.svg" alt="Thanks for stopping by" width="100%">
-</p>
+<picture><source media="(prefers-color-scheme: dark)" srcset="assets/footer-dark.svg"><img src="assets/footer-light.svg" alt="Thanks for stopping by. Currently building Mowr." width="100%"></picture>
 
-<!-- Assets are generated by scripts/build.py -->
+<!-- Generated by scripts/build.py. Set in Mowafy Serif and Mowafy Sans. -->
