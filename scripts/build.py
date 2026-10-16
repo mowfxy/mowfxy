@@ -19,10 +19,10 @@ SERIF_DIR = os.environ.get("MOWAFY_SERIF", os.path.join(HERE, "../../serif/fonts
 SANS_DIR = os.environ.get("MOWAFY_SANS", os.path.join(HERE, "../../sans/fonts/ttf"))
 
 THEMES = {
-    "light": dict(ink="#1C1B18", soft="#55514A", mute="#8A847A", rule="#DDD8CE", accent="#B4532F",
-                  dot="#B4532F"),
-    "dark": dict(ink="#EEEAE2", soft="#B9B3A8", mute="#857F75", rule="#2C2A27", accent="#E0805A",
-                 dot="#E0805A"),
+    "light": dict(ink="#111111", soft="#4A4A4A", mute="#8A8A8A", rule="#E2E2E2", accent="#6B6B6B",
+                  dot="#111111", field=.45),
+    "dark": dict(ink="#FFFFFF", soft="#B4B4B4", mute="#7C7C7C", rule="#2A2A2A", accent="#9C9C9C",
+                 dot="#FFFFFF", field=.55),
 }
 W = 1000
 
@@ -159,6 +159,9 @@ def rosette(cx, cy, R, r, d, turns, steps=2400):
     return "M" + " L".join(pts) + "Z"
 
 
+CODE = "{}<>/;=01()[]#*+_"
+
+
 def dots(c, h, key, cx, cy, reach, step=20, rmax=3.3, wave=7.0):
     """A halftone field of fine dots. Dots grow toward (cx, cy) and fade out
     with distance; a slow diagonal wave brightens and dims them in turn."""
@@ -178,18 +181,25 @@ def dots(c, h, key, cx, cy, reach, step=20, rmax=3.3, wave=7.0):
             if f < 0.04:
                 continue
             band = (i + j) // 2
-            bands.setdefault(band, []).append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{r:.2f}" opacity="{f:.2f}"/>')
+            h_ = (i * 7919 + j * 104729) % 1000 / 1000  # stable pseudo-random per cell
+            if h_ < 0.2 and f > 0.28:  # about one cell in five, only where the field is dense
+                ch = CODE[int(h_ * 5 * len(CODE)) % len(CODE)]
+                el = (f'<g opacity="{min(1, f * 1.15):.2f}">'
+                      f'{SANS_MED.uses(ch, step * 0.62, x, y + step * 0.22, "middle")}</g>')
+            else:
+                el = f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{r:.2f}" opacity="{f:.2f}"/>'
+            bands.setdefault(band, []).append(el)
     n = max(bands) + 1
     groups = "".join(
         f'<g style="animation-delay:{-wave * (n - b) / n * 2:.2f}s">{"".join(v)}</g>' for b, v in sorted(bands.items()))
     css = (f"@keyframes {key}w{{0%,100%{{opacity:.25}}50%{{opacity:1}}}}"
            f".{key} g{{animation:{key}w {wave}s ease-in-out infinite}}")
-    return f'<g class="{key}" fill="{c["dot"]}">{groups}</g>', css
+    return f'<g opacity="{c["field"]}"><g class="{key}" fill="{c["dot"]}">{groups}</g></g>', css
 
 
 def hero(c):
     H = 560
-    bg, css = dots(c, H, "h", 820, 250, 520)
+    bg, css = dots(c, H, "h", 870, 260, 470)
     b = [bg]
     b.append(caps("Mohamed Mowafy  ·  Cairo", 17, 0, 52, c["mute"]))
     b.append(t(SERIF_LIGHT, "Mohamed", 136, -5, 200, c["ink"], ls=-2.5))
