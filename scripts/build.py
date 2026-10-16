@@ -19,8 +19,10 @@ SERIF_DIR = os.environ.get("MOWAFY_SERIF", os.path.join(HERE, "../../serif/fonts
 SANS_DIR = os.environ.get("MOWAFY_SANS", os.path.join(HERE, "../../sans/fonts/ttf"))
 
 THEMES = {
-    "light": dict(ink="#1C1B18", soft="#55514A", mute="#8A847A", rule="#DDD8CE", accent="#B4532F"),
-    "dark": dict(ink="#EEEAE2", soft="#B9B3A8", mute="#857F75", rule="#2C2A27", accent="#E0805A"),
+    "light": dict(ink="#1C1B18", soft="#55514A", mute="#8A847A", rule="#DDD8CE", accent="#B4532F",
+                  warm="#E2A15A", rose="#D9817A", glow=.26),
+    "dark": dict(ink="#EEEAE2", soft="#B9B3A8", mute="#857F75", rule="#2C2A27", accent="#E0805A",
+                 warm="#C98A3E", rose="#B85C55", glow=.34),
 }
 W = 1000
 
@@ -102,9 +104,7 @@ class Font:
 
 
 SERIF_LIGHT = Font(f"{SERIF_DIR}/MowafySerif-Light.otf")
-SERIF_LIGHT_IT = Font(f"{SERIF_DIR}/MowafySerif-LightItalic.otf")
 SERIF = Font(f"{SERIF_DIR}/MowafySerif-Regular.otf")
-SERIF_IT = Font(f"{SERIF_DIR}/MowafySerif-Italic.otf")
 SANS = Font(f"{SANS_DIR}/MowafySans-Regular.ttf")
 SANS_MED = Font(f"{SANS_DIR}/MowafySans-Medium.ttf")
 
@@ -159,30 +159,45 @@ def rosette(cx, cy, R, r, d, turns, steps=2400):
     return "M" + " L".join(pts) + "Z"
 
 
+def ambient(c, h, blobs, key):
+    """Soft light drifting behind the content. Radial gradients fade to nothing,
+    so it blends into whatever GitHub theme sits around it."""
+    defs, shapes, css = [], [], []
+    for i, (x, y, rx, ry, col, op, dx, dy, dur) in enumerate(blobs):
+        gid = f"{key}{i}"
+        defs.append(f'<radialGradient id="{gid}"><stop offset="0" stop-color="{col}" stop-opacity="{op}"/>'
+                    f'<stop offset=".45" stop-color="{col}" stop-opacity="{op*0.45:.3f}"/>'
+                    f'<stop offset="1" stop-color="{col}" stop-opacity="0"/></radialGradient>')
+        shapes.append(f'<ellipse cx="{x}" cy="{y}" rx="{rx}" ry="{ry}" fill="url(#{gid})" '
+                      f'style="animation:{gid} {dur}s ease-in-out infinite alternate"/>')
+        css.append(f"@keyframes {gid}{{from{{transform:translate(0,0)}}to{{transform:translate({dx}px,{dy}px)}}}}")
+    # feather every edge so the light never shows a hard border
+    defs.append(f'<linearGradient id="{key}fx"><stop offset="0" stop-color="#000"/><stop offset=".22" stop-color="#fff"/>'
+                f'<stop offset=".78" stop-color="#fff"/><stop offset="1" stop-color="#000"/></linearGradient>'
+                f'<linearGradient id="{key}fy" x2="0" y2="1"><stop offset="0" stop-color="#000"/><stop offset=".25" stop-color="#fff"/>'
+                f'<stop offset=".75" stop-color="#fff"/><stop offset="1" stop-color="#000"/></linearGradient>'
+                f'<mask id="{key}my"><rect width="{W}" height="{h}" fill="url(#{key}fy)"/></mask>'
+                f'<mask id="{key}m"><rect width="{W}" height="{h}" fill="url(#{key}fx)" mask="url(#{key}my)"/></mask>')
+    return f'<defs>{"".join(defs)}</defs><g mask="url(#{key}m)">{"".join(shapes)}</g>', "".join(css)
+
+
 def hero(c):
     H = 560
-    b = []
-    # ornament: two engraved rosettes turning slowly in opposite directions (moiré shimmer)
-    cx, cy = 810, 250
-    def family(n, rx, ry, op, spin):
-        rings = "".join(f'<ellipse cx="{cx}" cy="{cy}" rx="{rx}" ry="{ry}" transform="rotate({i*180/n:.2f} {cx} {cy})"/>'
-                        for i in range(n))
-        return (f'<g opacity="{op}" style="transform-origin:{cx}px {cy}px;animation:spin {spin}" '
-                f'fill="none" stroke="{c["accent"]}" stroke-width=".7">{rings}</g>')
-    b.append(family(48, 168, 46, .55, "120s linear infinite"))
-    b.append(family(30, 128, 84, .35, "160s linear infinite reverse"))
-    b.append(f'<circle cx="{cx}" cy="{cy}" r="186" fill="none" stroke="{c["rule"]}"/>'
-             f'<circle cx="{cx}" cy="{cy}" r="4" fill="{c["accent"]}"/>')
-
+    k = c["glow"]
+    bg, css = ambient(c, H, [
+        (700, 240, 300, 210, c["accent"], k, -200, 40, 23),
+        (420, 300, 260, 180, c["warm"], k * 0.8, 220, -40, 29),
+        (820, 360, 220, 150, c["rose"], k * 0.7, -150, -80, 19),
+    ], "h")
+    b = [bg]
     b.append(caps("Mohamed Mowafy  ·  Cairo", 17, 0, 52, c["mute"]))
-    b.append(t(SERIF_LIGHT, "Mohamed", 128, -4, 196, c["ink"], ls=-2))
-    b.append(t(SERIF_LIGHT_IT, "Mowafy", 128, -2, 316, c["accent"], ls=-2))
+    b.append(t(SERIF_LIGHT, "Mohamed", 136, -5, 200, c["ink"], ls=-2.5))
+    b.append(t(SERIF_LIGHT, "Mowafy", 136, -5, 328, c["accent"], ls=-2.5))
     intro = ("Electronics engineering student at the German University in Cairo. "
              "I build Mowr, a local-first AI workspace, and open-source skills "
              "that give coding agents better taste.")
-    for i, line in enumerate(wrap(intro, SANS, 26, 560)):
-        b.append(t(SANS, line, 26, 0, 392 + i * 40, c["soft"]))
-    css = "@keyframes spin{to{transform:rotate(360deg)}}"
+    for i, line in enumerate(wrap(intro, SANS, 26, 620)):
+        b.append(t(SANS, line, 26, 0, 404 + i * 40, c["soft"]))
     return svg(H, "".join(b), "Mohamed Mowafy — electronics engineering student building Mowr and agent skills", css)
 
 
@@ -199,7 +214,7 @@ def link(label, sub, c):
 # ---------------------------------------------------------------- selected work (static)
 def section(c):
     H = 130
-    b = [t(SERIF_IT, "Selected work", 50, 0, 84, c["ink"], ls=-.5),
+    b = [t(SERIF, "Selected work", 50, 0, 84, c["ink"], ls=-.5),
          caps("2025 — 2026", 15, W, 82, c["mute"], "end"),
          f'<line x1="0" y1="{H-1}" x2="{W}" y2="{H-1}" stroke="{c["ink"]}" stroke-width="1.5"/>']
     return svg(H, "".join(b), "Selected work")
@@ -229,15 +244,16 @@ def row(num, title, desc, kind, c):
 
 # ---------------------------------------------------------------- sign-off (animated dot)
 def footer(c):
-    H = 190
-    b = [t(SERIF_LIGHT_IT, "Thanks for stopping by.", 52, 0, 92, c["ink"], ls=-.6)]
-    dx, dy = 8, 146
-    b.append(f'<circle cx="{dx}" cy="{dy}" r="7" fill="{c["accent"]}" opacity=".3" '
-             f'style="transform-origin:{dx}px {dy}px;animation:ping 2.6s ease-out infinite"/>')
-    b.append(f'<circle cx="{dx}" cy="{dy}" r="6" fill="{c["accent"]}"/>')
-    b.append(t(SANS, "Currently building Mowr", 22, 30, 154, c["soft"]))
-    b.append(t(SANS, "mohamedmowafy.com", 22, W, 154, c["mute"], "end"))
-    css = "@keyframes ping{0%{transform:scale(1);opacity:.45}80%,100%{transform:scale(3.2);opacity:0}}"
+    H = 220
+    k = c["glow"]
+    bg, css = ambient(c, H, [
+        (300, 110, 340, 120, c["accent"], k * 0.75, 260, 10, 27),
+        (720, 120, 300, 110, c["warm"], k * 0.6, -240, -10, 21),
+    ], "f")
+    b = [bg, t(SERIF_LIGHT, "Thanks for stopping by.", 54, 0, 104, c["ink"], ls=-.8)]
+    b.append(f'<circle cx="7" cy="160" r="5" fill="{c["accent"]}"/>')
+    b.append(t(SANS, "Currently building Mowr", 22, 26, 168, c["soft"]))
+    b.append(t(SANS, "mohamedmowafy.com", 22, W, 168, c["mute"], "end"))
     return svg(H, "".join(b), "Thanks for stopping by. Currently building Mowr.", css)
 
 
