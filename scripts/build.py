@@ -162,7 +162,7 @@ def rosette(cx, cy, R, r, d, turns, steps=2400):
 CODE = "{}<>/;=01()[]#*+_"
 
 
-def dots(c, h, key, cx, cy, reach, step=20, rmax=3.3, wave=9.0):
+def dots(c, h, key, cx, cy, reach, step=20, rmax=3.3, wave=4.2):
     """A halftone field of fine dots with code symbols scattered through it.
 
     Dots grow toward (cx, cy) and dissolve with distance. A soft diagonal wave
@@ -188,17 +188,23 @@ def dots(c, h, key, cx, cy, reach, step=20, rmax=3.3, wave=9.0):
                 el = f'<g opacity="{min(1, f * 1.15):.2f}">{glyph}</g>'
             else:
                 el = dot.replace("/>", f' opacity="{f:.2f}"/>')
+            r2 = ((i * 131 + j * 197) % 211) / 211
+            if r2 < 0.35:  # independent twinkle so something is always moving
+                dur = 1.8 + 2.4 * ((i * 17 + j * 29) % 23) / 23
+                el = f'<g class="{key}t" style="animation-duration:{dur:.2f}s;animation-delay:{-r2 * 10:.2f}s">{el}</g>'
             cells.append((i + j, el))
 
     # one group per diagonal, each a little behind the last: a continuous wave
     bands = {}
     for b, el in cells:
         bands.setdefault(b, []).append(el)
-    span = 46  # diagonals per wavelength
+    span = 34  # diagonals per wavelength
     groups = "".join(f'<g class="{key}w" style="animation-delay:{-wave * (b % span) / span:.2f}s">{"".join(v)}</g>'
                      for b, v in sorted(bands.items()))
-    css = (f"@keyframes {key}w{{0%,100%{{opacity:.3}}50%{{opacity:1}}}}"
+    css = (f"@keyframes {key}w{{0%,100%{{opacity:.15}}50%{{opacity:1}}}}"
            f".{key}w{{animation:{key}w {wave}s cubic-bezier(.45,0,.55,1) infinite}}"
+           f"@keyframes {key}t{{0%,100%{{opacity:1}}50%{{opacity:.1}}}}"
+           f".{key}t{{animation:{key}t 3s ease-in-out infinite}}"
            )
     return f'<g opacity="{c["field"]}" fill="{c["dot"]}">{groups}</g>', css
 
