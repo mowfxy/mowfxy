@@ -1,8 +1,6 @@
 <picture><source media="(prefers-color-scheme: dark)" srcset="assets/hero-dark.svg"><img src="assets/hero-light.svg" alt="Mohamed Mowafy — just an electronics engineering student having fun" width="100%"></picture>
 
-<p>
-  <a href="https://mohamedmowafy.com"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/link-site-dark.svg"><img src="assets/link-site-light.svg" alt="Website: mohamedmowafy.com" height="40"></picture></a>
-</p>
+<a href="https://mohamedmowafy.com"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/website-dark.svg"><img src="assets/website-light.svg" alt="Website: mohamedmowafy.com" width="100%"></picture></a>
 
 <br>
 

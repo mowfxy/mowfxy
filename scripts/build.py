@@ -105,7 +105,7 @@ class Font:
 
 SERIF_LIGHT = Font(f"{SERIF_DIR}/MowafySerif-Light.otf")
 SERIF = Font(f"{SERIF_DIR}/MowafySerif-Regular.otf")
-SERIF_BOLD = Font(f"{SERIF_DIR}/MowafySerif-Bold.otf")
+SERIF_MED = Font(f"{SERIF_DIR}/MowafySerif-Medium.otf")
 SANS = Font(f"{SANS_DIR}/MowafySans-Regular.ttf")
 SANS_MED = Font(f"{SANS_DIR}/MowafySans-Medium.ttf")
 
@@ -215,21 +215,22 @@ def hero(c):
     bg, css = dots(c, H, "h", 870, 260, 470)
     b = [bg]
     b.append(caps("Mohamed Mowafy  ·  Cairo", 17, 0, 52, c["mute"]))
-    b.append(t(SERIF_BOLD, "Mohamed", 136, -5, 200, c["ink"], ls=-3))
-    b.append(t(SERIF_BOLD, "Mowafy", 136, -5, 328, c["accent"], ls=-3))
+    b.append(t(SERIF_MED, "Mohamed", 136, -5, 200, c["ink"], ls=-2.8))
+    b.append(t(SERIF_MED, "Mowafy", 136, -5, 328, c["accent"], ls=-2.8))
     b.append(t(SANS, "Just an electronics engineering student", 28, 0, 412, c["soft"]))
     b.append(t(SANS, "having fun.", 28, 0, 454, c["soft"]))
     return svg(H, "".join(b), "Mohamed Mowafy — just an electronics engineering student having fun", css)
 
 
-# ---------------------------------------------------------------- links (static)
-def link(label, sub, c):
-    w, h = 250, 84
-    b = [f'<rect x="1" y="1" width="{w-2}" height="{h-2}" rx="{(h-2)/2}" fill="none" stroke="{c["rule"]}" stroke-width="1.5"/>',
-         t(SANS_MED, label, 24, 30, 40, c["ink"]),
-         t(SANS, sub, 16, 30, 63, c["mute"]),
-         arrow(w - 30, 34, c["accent"])]
-    return wrap_svg(w, h, "".join(b), f"{label}: {sub}")
+# ---------------------------------------------------------------- website (static)
+def website(c):
+    H = 120
+    b = [f'<line x1="0" y1="1" x2="{W}" y2="1" stroke="{c["rule"]}" stroke-width="1.5"/>',
+         caps("Website", 15, 0, 68, c["mute"]),
+         t(SERIF, "mohamedmowafy.com", 44, 150, 76, c["ink"], ls=-.4),
+         arrow(W - 2, 46, c["accent"], 18),
+         f'<line x1="0" y1="{H-1}" x2="{W}" y2="{H-1}" stroke="{c["rule"]}" stroke-width="1.5"/>']
+    return svg(H, "".join(b), "Website: mohamedmowafy.com")
 
 
 # ---------------------------------------------------------------- selected work (static)
@@ -270,7 +271,6 @@ def footer(c):
     b = [bg, t(SERIF_LIGHT, "Thanks for stopping by.", 54, 0, 104, c["ink"], ls=-.8)]
     b.append(f'<circle cx="7" cy="160" r="5" fill="{c["accent"]}"/>')
     b.append(t(SANS, "Probably tinkering with something right now", 22, 26, 168, c["soft"]))
-    b.append(t(SANS, "mohamedmowafy.com", 22, W, 168, c["mute"], "end"))
     return svg(H, "".join(b), "Thanks for stopping by. Probably tinkering with something right now.", css)
 
 
@@ -294,9 +294,7 @@ def write_readme():
     parts = [
         pic("hero", "Mohamed Mowafy — just an electronics engineering student having fun", "100%"),
         "",
-        "<p>",
-        f'  <a href="https://mohamedmowafy.com">{pic("link-site", "Website: mohamedmowafy.com", height=40)}</a>',
-        "</p>",
+        f'<a href="https://mohamedmowafy.com">{pic("website", "Website: mohamedmowafy.com", "100%")}</a>',
         "",
         "<br>",
         "",
@@ -321,6 +319,6 @@ if __name__ == "__main__":
         write(f"footer-{theme}.svg", footer(c))
         for slug, num, title, desc, kind in WORK:
             write(f"work-{slug}-{theme}.svg", row(num, title, desc, kind, c))
-        write(f"link-site-{theme}.svg", link("Website", "mohamedmowafy.com", c))
+        write(f"website-{theme}.svg", website(c))
     print(f"{len(os.listdir(OUT))} files written")
     write_readme()
