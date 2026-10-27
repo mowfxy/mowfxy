@@ -243,14 +243,12 @@ def section(c):
 
 
 WORK = [
-    ("mowr", "01", "Mowr", "A local-first AI workspace for Windows. Chats and files stay on your machine.", "Desktop app"),
-    ("blend", "02", "Blend", "Eleven coordinated frontend skills that give coding agents real design taste.", "Agent skills"),
+    ("clem", "01", "Clem", "A calm, local-first workspace for Windows, powered by the AI plan you already have.", "Desktop app"),
+    ("kern", "02", "Kern", "A design practice for coding agents: taste, method and craft for every interface.", "Agent skills"),
     ("anti-slop", "03", "anti-slop", "Makes agents finish the details: working forms, accessibility, mobile, metadata.", "Agent skill"),
     ("web-perf", "04", "Web Perf", "Measure first, fix the real bottleneck, keep Core Web Vitals from slipping.", "Agent skill"),
-    ("repo-tidier", "05", "Repo Tidier", "Turns a messy repository into a clean project without changing how it behaves.", "Agent skill"),
-    ("kinetra", "06", "Kinetra", "A TypeScript workbench that renders physics and circuit diagrams from JSON.", "Engineering"),
+    ("kinetra", "05", "Kinetra", "A TypeScript workbench that renders physics and circuit diagrams from JSON.", "Engineering"),
 ]
-
 
 def row(num, title, desc, kind, c):
     H = 170
@@ -287,9 +285,9 @@ def pic(name, alt, width=None, height=None):
 
 def write_readme():
     links = {
-        "mowr": "https://github.com/mowfxy/mowr-releases", "blend": "https://github.com/mowfxy/blend",
+        "clem": "https://github.com/mowfxy/clem", "kern": "https://github.com/mowfxy/kern",
         "anti-slop": "https://github.com/mowfxy/anti-slop", "web-perf": "https://github.com/mowfxy/web-perf",
-        "repo-tidier": "https://github.com/mowfxy/cl-repo", "kinetra": "https://github.com/mowfxy/kinetra",
+        "kinetra": "https://github.com/mowfxy/kinetra",
     }
     parts = [
         pic("hero", "Mohamed Mowafy — just an electronics engineering student having fun", "100%"),

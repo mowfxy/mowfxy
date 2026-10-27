@@ -6,11 +6,10 @@
 
 <picture><source media="(prefers-color-scheme: dark)" srcset="assets/section-dark.svg"><img src="assets/section-light.svg" alt="Stuff I’ve made" width="100%"></picture>
 
-<a href="https://github.com/mowfxy/mowr-releases"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/work-mowr-dark.svg"><img src="assets/work-mowr-light.svg" alt="Mowr: A local-first AI workspace for Windows. Chats and files stay on your machine." width="100%"></picture></a>
-<a href="https://github.com/mowfxy/blend"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/work-blend-dark.svg"><img src="assets/work-blend-light.svg" alt="Blend: Eleven coordinated frontend skills that give coding agents real design taste." width="100%"></picture></a>
+<a href="https://github.com/mowfxy/clem"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/work-clem-dark.svg"><img src="assets/work-clem-light.svg" alt="Clem: A calm, local-first workspace for Windows, powered by the AI plan you already have." width="100%"></picture></a>
+<a href="https://github.com/mowfxy/kern"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/work-kern-dark.svg"><img src="assets/work-kern-light.svg" alt="Kern: A design practice for coding agents: taste, method and craft for every interface." width="100%"></picture></a>
 <a href="https://github.com/mowfxy/anti-slop"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/work-anti-slop-dark.svg"><img src="assets/work-anti-slop-light.svg" alt="anti-slop: Makes agents finish the details: working forms, accessibility, mobile, metadata." width="100%"></picture></a>
 <a href="https://github.com/mowfxy/web-perf"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/work-web-perf-dark.svg"><img src="assets/work-web-perf-light.svg" alt="Web Perf: Measure first, fix the real bottleneck, keep Core Web Vitals from slipping." width="100%"></picture></a>
-<a href="https://github.com/mowfxy/cl-repo"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/work-repo-tidier-dark.svg"><img src="assets/work-repo-tidier-light.svg" alt="Repo Tidier: Turns a messy repository into a clean project without changing how it behaves." width="100%"></picture></a>
 <a href="https://github.com/mowfxy/kinetra"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/work-kinetra-dark.svg"><img src="assets/work-kinetra-light.svg" alt="Kinetra: A TypeScript workbench that renders physics and circuit diagrams from JSON." width="100%"></picture></a>
 
 <br>
