@@ -7,7 +7,7 @@ The project cards are still pictures.
     pip install fonttools brotli
     python3 scripts/build.py      # CLEM=../clem KERN=../kern to point at the repos the pictures come from
 """
-import base64, io, math, os
+import base64, io, math, os, re
 from fontTools import subset
 from fontTools.ttLib import TTFont
 
@@ -56,8 +56,9 @@ def spline(pts, closed):
         a = pts[(i - 1) % n if closed else max(0, i - 1)]
         b, c = pts[i], pts[(i + 1) % n]
         d = pts[(i + 2) % n if closed else min(n - 1, i + 2)]
-        for j in range(8):
-            t = j / 8
+        sub = 4 if COMPACT[0] else 8
+        for j in range(sub):
+            t = j / sub
             t2, t3 = t * t, t * t * t
             out.append(tuple(.5 * (2 * b[k] + (-a[k] + c[k]) * t + (2 * a[k] - 5 * b[k] + 4 * c[k] - d[k]) * t2
                                    + (-a[k] + 3 * b[k] - 3 * c[k] + d[k]) * t3) for k in (0, 1)))
@@ -84,14 +85,19 @@ def hand(pts, s, boil):
              y + A * (.7 * math.sin(x * .029 + f * 1.3) + .3 * math.sin(x * .077 - y * .019 + f * 2.1))) for x, y in pts]
 
 
+COMPACT = [False]
+
+
 def path_d(pts, close=False):
+    if COMPACT[0]:
+        return "M" + "L".join(f"{x:.0f} {y:.0f}" for x, y in pts) + ("Z" if close else "")
     return "M" + "L".join(f"{x:.1f},{y:.1f}" for x, y in pts) + ("Z" if close else "")
 
 
 def draw(pts, boil, fill=None, w=LINE, smooth=False, closed=False, color=INK):
     s = SEED[0]
     SEED[0] += 1
-    tr = hand(spline(pts, closed) if smooth else densify(pts, closed), s, boil)
+    tr = hand(spline(pts, closed) if smooth else densify(pts, closed, 14 if COMPACT[0] else 8), s, boil)
     out = ""
     if fill and closed:
         out += f'<path d="{path_d([(x + .9, y + .7) for x, y in tr], True)}" fill="{fill}"/>'
@@ -105,8 +111,12 @@ def draw(pts, boil, fill=None, w=LINE, smooth=False, closed=False, color=INK):
             a = s * 1.7
             dx, dy = math.cos(a) * 1.4, math.sin(a) * 1.4
             line = [(x + dx * i / L, y + dy * i / L) for i, (x, y) in enumerate(r + r[:3])]
-        out += (f'<path d="{path_d(line)}" fill="none" stroke="{color}" stroke-width="{w}" '
-                f'stroke-linecap="round" stroke-linejoin="round" pathLength="1"/>')
+        if COMPACT[0]:
+            c = "" if color == INK else f' stroke="{color}"'
+            out += f'<path class="L" d="{path_d(line)}" stroke-width="{w}"{c}/>'
+        else:
+            out += (f'<path d="{path_d(line)}" fill="none" stroke="{color}" stroke-width="{w}" '
+                    f'stroke-linecap="round" stroke-linejoin="round" pathLength="1"/>')
     return out
 
 
@@ -177,74 +187,13 @@ def rows_text(rows, x, y, size, lh, fill, opacity=1, cls=""):
     """Rows of ASCII as one <text>, one <tspan> per row, spaces kept."""
     sp = []
     for i, r in enumerate(rows):
-        lead = len(r) - len(r.lstrip(" "))
-        r = r.strip(" ")
-        if r:
-            sp.append(f'<tspan x="{x + lead * size * .6:.1f}" y="{y + i * lh:.1f}">{esc(r)}</tspan>')
+        for m in re.finditer(r"\S+(?: {1,9}\S+)*", r):
+            sp.append(f'<tspan x="{x + m.start() * size * .6:.1f}" y="{y + i * lh:.1f}">{esc(m.group())}</tspan>')
     if not sp:
         return ""
     o = f' opacity="{opacity}"' if opacity < 1 else ""
     c = f' class="{cls}"' if cls else ""
     return f'<text{c} class="mono" font-size="{size}" fill="{fill}"{o} xml:space="preserve">{"".join(sp)}</text>'
-
-
-class Flip:
-    """Looping flip-books of ASCII frames, n frames over `period` seconds."""
-    done = set()
-
-    def __init__(self, film):
-        self.f = film
-
-    def __call__(self, frames, x, y, size, lh, period, fill, opacity=1):
-        n = len(frames)
-        key = f"fl{n}"
-        if key not in Flip.done:
-            Flip.done.add(key)
-            self.f.css.append(f"@keyframes {key}{{0%{{visibility:visible}}{100 / n:.3f}%,100%{{visibility:hidden}}}}")
-        out = ""
-        for i, fr in enumerate(frames):
-            d = -(n - i) % n * period / n
-            vis = "" if i == 0 else "visibility:hidden;"
-            out += (f'<g class="fl" style="{vis}animation:{key} {period}s step-end {-(period - i * period / n) % period:.3f}s '
-                    f'infinite">{rows_text(fr, x, y, size, lh, fill, opacity)}</g>')
-        return out
-
-
-def smoke_frames(n=12, cols=18, rows=12):
-    out = []
-    for k in range(n):
-        g = [[" "] * cols for _ in range(rows)]
-        for p in range(26):
-            ph = (hsh(p, 1) + k / n) % 1
-            y = int((1 - ph) * (rows - 1))
-            x = int(cols / 2 + math.sin(ph * 5 + p) * (1 + ph * 4) + (hsh(p, 2) - .5) * 3)
-            if 0 <= x < cols:
-                g[y][x] = "o" if ph < .15 else ("~" if ph < .45 else ("'" if ph < .7 else "."))
-        out.append(["".join(r) for r in g])
-    return out
-
-
-def static_frames(cols, rows, n=4, dens=.13):
-    return [["".join((CHARS[1 + int(hsh(i + k * 31, j) * 6)] if hsh(i * 3 + k, j * 7 + k) < dens else " ")
-                     for i in range(cols)) for j in range(rows)] for k in range(n)]
-
-
-def glow_frames(cols, rows, cx, cy, r0, r1, n=4, aspect=.52):
-    out = []
-    for k in range(n):
-        fr = []
-        for j in range(rows):
-            line = ""
-            for i in range(cols):
-                d = math.hypot((i - cx) * aspect, j - cy)
-                if d < r0 or d > r1:
-                    line += " "
-                    continue
-                v = (1 - (d - r0) / (r1 - r0)) ** 1.4
-                line += (" .:+*"[min(4, int(v * 5 + hsh(i + k, j) * .8))] if hsh(i * 7 + k * 13, j * 3) < v * .9 else " ")
-            fr.append(line)
-        out.append(fr)
-    return out
 
 
 RIDGE = [(0, .9), (.05, .86), (.09, .88), (.16, .78), (.2, .8), (.25, .72), (.3, .79), (.34, .77), (.4, .86),
@@ -281,262 +230,447 @@ def mountains(cols, rows, top=.0, k=0, stars=True):
     return out
 
 
-# ------------------------------------------------------------------ the film
-SNAP = "cubic-bezier(.34,1.5,.64,1)"
+# ------------------------------------------------------------------ the film: ink against ASCII
+# Drawn frame by frame at 12 fps, like Clem's films: every frame is a fresh drawing, so the ink boils and the
+# characters flicker on their own. Each frame is shown for one twelfth of a second by a shared CSS step animation.
+FPS, T = 12, 12.0
+FW, FH = 1000, 420
+CS, CW_, LH = 14, 8.4, 16.8          # ASCII cell: font size, advance, line height
+COLS, ROWS = 119, 25
+NAME = "Mohamed Mowafy"
 
 
-class Film:
-    """Shots on one looping timeline. Every timed thing is a CSS animation over the whole loop."""
-
-    def __init__(self, T):
-        self.T, self.css, self.n = T, [], 0
-
-    def anim(self, stops):
-        """stops: [(seconds, 'css', optional easing for the segment that starts there)]"""
-        self.n += 1
-        k = f"k{self.n}"
-        fr = "".join(f"{max(0, min(100, st[0] / self.T * 100)):.3f}%{{{st[1]}"
-                     + (f";animation-timing-function:{st[2]}" if len(st) > 2 else "") + "}" for st in stops)
-        self.css.append(f"@keyframes {k}{{{fr}}}.{k}{{animation:{k} {self.T}s linear infinite}}")
-        return k
-
-    def windows(self, wins):
-        """Visible only inside the given (start, end) windows of the loop."""
-        stops, t = [(0, "opacity:0")], 0
-        for a, b in sorted(wins):
-            stops += [(a, "opacity:0", "step-end"), (a + .001, "opacity:1"), (b, "opacity:1", "step-end"),
-                      (b + .001, "opacity:0")]
-        stops.append((self.T, "opacity:0"))
-        if wins and min(a for a, _ in wins) <= 0:
-            stops[0] = (0, "opacity:1")
-        return self.anim(stops)
-
-    def ink(self, fn, draw_on=None):
-        """Three drawings of the same lines, flipped six times a second, so the line boils."""
-        seed = SEED[0]
-        out = ""
-        for b in range(3):
-            SEED[0] = seed
-            out += f'<g class="b b{b}">{fn(b)}</g>'
-        if draw_on:
-            t0, t1 = draw_on
-            k = self.anim([(0, "stroke-dashoffset:1"), (t0, "stroke-dashoffset:1", "cubic-bezier(.4,.1,.3,1)"),
-                           (t1, "stroke-dashoffset:0"), (self.T, "stroke-dashoffset:0")])
-            out = out.replace('pathLength="1"', f'pathLength="1" stroke-dasharray="1 1.02" class="{k}"')
-        return out
-
-    def pop(self, t):
-        return self.anim([(0, "transform:scale(0)"), (t, "transform:scale(0)", SNAP), (t + .32, "transform:scale(1)"),
-                          (self.T, "transform:scale(1)")])
-
-    def fade(self, a, b, c=None, d=None):
-        st = [(0, "opacity:0"), (a, "opacity:0"), (b, "opacity:1")]
-        if c is not None:
-            st += [(c, "opacity:1"), (d, "opacity:0")]
-        return self.anim(st + [(self.T, f"opacity:{0 if c is not None else 1}")])
+def ease_out(x):
+    x = max(0.0, min(1.0, x))
+    return 1 - (1 - x) ** 3
 
 
-def spot(poly, b, a=-.7, gap=7, color=INK):
-    return (draw(poly, b, fill=BLUE, closed=True, w=FINE, color=color)
-            + "".join(draw([p, q], b, w=THIN, color=color) for p, q in stripes(poly, a, gap)))
+def snap(x):
+    x = max(0.0, min(1.0, x))
+    c = 1.7
+    return 1 + (c + 1) * (x - 1) ** 3 + c * (x - 1) ** 2
 
 
-def caption(s):
-    return f'<text x="560" y="224" class="serif" font-size="42" fill="{INK}">{esc(s)}</text>'
+def partial(pts, k):
+    """The first k (0–1) of a polyline, by length: the pen still drawing it."""
+    if k >= 1:
+        return pts
+    if k <= 0 or len(pts) < 2:
+        return []
+    seg = [math.dist(pts[i], pts[i + 1]) for i in range(len(pts) - 1)]
+    left = sum(seg) * k
+    out = [pts[0]]
+    for i, s in enumerate(seg):
+        if left >= s:
+            out.append(pts[i + 1]); left -= s
+        else:
+            t = left / s if s else 0
+            out.append((pts[i][0] + (pts[i + 1][0] - pts[i][0]) * t, pts[i][1] + (pts[i + 1][1] - pts[i][1]) * t))
+            break
+    return out
+
+
+class Grid:
+    """One frame of ASCII: a character and a colour per cell."""
+
+    def __init__(self):
+        self.c = {}
+
+    def put(self, x, y, ch, col="a"):
+        i, j = int(round((x - 4) / CW_)), int(round((y - 4) / LH))
+        if 0 <= i < COLS and 0 <= j < ROWS and ch != " ":
+            self.c[(i, j)] = (ch, col)
+
+    def clear(self, pred):
+        for key in [k for k in self.c if pred(4 + k[0] * CW_, 4 + k[1] * LH)]:
+            del self.c[key]
+
+    def svg(self):
+        fills = {"a": "#8f8e86", "i": INK, "b": BLUE, "s": SAND}
+        out = []
+        for col, fill in fills.items():
+            rows = []
+            for j in range(ROWS):
+                rows.append("".join(self.c.get((i, j), (" ", ""))[0] if self.c.get((i, j), (" ", ""))[1] == col else " "
+                                    for i in range(COLS)).rstrip())
+            out.append(rows_text(rows, 4 - CW_ / 2 + 4.2 - 4.2, 4 + LH * .35, CS, LH, fill))
+        return "".join(out)
+
+
+def dirch(a):
+    """A character that points along angle a."""
+    a = a % math.pi
+    return "-" if a < math.pi / 8 or a > 7 * math.pi / 8 else ("\\" if a < 3 * math.pi / 8 else ("|" if a < 5 * math.pi / 8 else "/"))
+
+
+# ---------------- ASCII moves
+def rain(g, t, dens=1.0, col="a", head="i"):
+    for i in range(COLS):
+        if hsh(i, 1) > dens:
+            continue
+        v = 10 + hsh(i, 2) * 16
+        hy = (t * v + hsh(i, 3) * 60) % (ROWS + 14) - 4
+        L = 5 + int(hsh(i, 4) * 8)
+        for k in range(L):
+            j = int(hy) - k
+            if 0 <= j < ROWS:
+                ch = CHARS[1 + int(hsh(i * 3 + j, int(t * 12) + k) * 15)]
+                g.put(4 + i * CW_, 4 + j * LH, ch, head if k == 0 else col)
+
+
+def burst(g, cx, cy, age, n=60, speed=520, col="i", seed=0):
+    """Characters thrown out from a point, each pointing the way it flies."""
+    for p in range(n):
+        a = TAU * hsh(p, seed + 5)
+        sp = speed * (.35 + .65 * hsh(p, seed + 6))
+        r = sp * age * (1 - .35 * age)
+        if age > .9 * hsh(p, seed + 7) + .4:
+            continue
+        g.put(cx + math.cos(a) * r, cy + math.sin(a) * r * .8, dirch(a) if hsh(p, seed + 8) < .6 else "*+o."[p % 4], col)
+
+
+def ring(g, cx, cy, r, col="a", ch=None):
+    n = max(8, int(r * .5))
+    for p in range(n):
+        a = TAU * p / n
+        g.put(cx + math.cos(a) * r, cy + math.sin(a) * r * .9, ch or dirch(a + math.pi / 2), col)
+
+
+def bolt(g, x0, y0, x1, y1, seed, col="i"):
+    pts, n = [], 9
+    for k in range(n + 1):
+        u = k / n
+        off = 0 if k in (0, n) else (hsh(seed, k) - .5) * 90
+        pts.append((x0 + (x1 - x0) * u + off, y0 + (y1 - y0) * u))
+    for a, b in zip(pts, pts[1:]):
+        steps = int(math.dist(a, b) / 9) + 1
+        ang = math.atan2(b[1] - a[1], b[0] - a[0])
+        for s in range(steps):
+            g.put(a[0] + (b[0] - a[0]) * s / steps, a[1] + (b[1] - a[1]) * s / steps, dirch(ang), col)
+    return pts
+
+
+def sphere(g, cx, cy, R, rot, col="b", dim="a"):
+    for j in range(-int(R / LH) - 1, int(R / LH) + 2):
+        for i in range(-int(R / CW_) - 1, int(R / CW_) + 2):
+            x, y = i * CW_ / R, j * LH / R
+            d = x * x + y * y
+            if d > 1:
+                continue
+            z = math.sqrt(1 - d)
+            lon = math.atan2(x, z) + rot
+            lat = math.asin(-y)
+            shade = max(0, -.5 * x - .4 * y + .75 * z)
+            on = abs(math.sin(lon * 3)) < .25 or abs(math.sin(lat * 3)) < .2
+            g.put(cx + i * CW_, cy + j * LH, " .:-=+*#%@"[min(9, int((.35 + .65 * shade) * 9))] if on
+                  else " .:"[min(2, int(shade * 3))], col if on else dim)
+
+
+def field(g, pred, t, col="a", dens=.55):
+    for j in range(ROWS):
+        for i in range(COLS):
+            x, y = 4 + i * CW_, 4 + j * LH
+            if pred(x, y) and hsh(i * 7 + int(t * 12), j * 3) < dens:
+                g.put(x, y, CHARS[1 + int(hsh(i + int(t * 12), j) * 15)], col)
+
+
+def scramble(s, prog, salt):
+    pool = "MOHAMEDWFY@#%&*+=~^/\\<>01"
+    return "".join(c if c == " " or hsh(i, 3) < prog * 1.15 - .08 else pool[int(hsh(i, salt) * len(pool))]
+                   for i, c in enumerate(s))
+
+
+# ---------------- ink moves
+class Ink:
+    def __init__(self, boil):
+        self.b, self.out = boil, []
+
+    def line(self, pts, w=LINE, k=1, smooth=False, color=INK):
+        p = partial(spline(pts, False) if smooth else pts, k)
+        if len(p) > 1:
+            self.out.append(draw(p, self.b, w=w, color=color))
+        else:
+            SEED[0] += 1
+
+    def shape(self, pts, w=LINE, fill=None, color=INK, hatch=None):
+        self.out.append(draw(pts, self.b, w=w, closed=True, fill=fill, color=color))
+        if hatch is not None:
+            for p, q in stripes(pts, hatch, 7):
+                self.out.append(draw([p, q], self.b, w=THIN, color=color))
+
+    def svg(self):
+        return "".join(self.out)
+
+
+def nib(ink, x, y, a, s=1.0):
+    pts = [(0, 0), (-16, -9), (-46, -9), (-46, 9), (-16, 9)]
+    c, si = math.cos(a), math.sin(a)
+    tr = [(x + (px * c - py * si) * s, y + (px * si + py * c) * s) for px, py in pts]
+    ink.shape(tr, w=FINE, fill=BLUE)
+    ink.line([(x, y), (x - 16 * c * s, y - 16 * si * s)], w=THIN)
+
+
+def splat(ink, cx, cy, r, seed):
+    pts = [(cx + math.cos(TAU * k / 14) * r * (.7 + .5 * hsh(seed, k)),
+            cy + math.sin(TAU * k / 14) * r * (.7 + .5 * hsh(seed, k))) for k in range(14)]
+    ink.out.append(draw(spline(pts, True), ink.b, w=FINE, closed=True, fill=BLUE))
+    for p, q in stripes(pts, -.7, 7):
+        ink.out.append(draw([p, q], ink.b, w=THIN))
+
+
+# ---------------- the fight, beat by beat
+def frame(t):
+    """Everything on screen at time t: (ascii svg, ink svg, shake, flash)."""
+    SEED[0] = 0
+    g, ink = Grid(), Ink(int(t * FPS) // 2 % 3)
+    shake, flash, extra = 0.0, False, ""
+    cx, cy = FW / 2, FH / 2
+
+    if t < 1.0:                       # 1 · ASCII rain; an ink slash cuts it in two
+        rain(g, t, dens=.55)
+        k = ease_out((t - .35) / .2)
+        a, b = (60, 20), (940, 400)
+        if k > 0:
+            ink.line([a, b], w=LINE + 1.5, k=k)
+            off = (t - .55) * 260 if t > .55 else 0
+            g.clear(lambda x, y: abs((y - a[1]) * (b[0] - a[0]) - (x - a[0]) * (b[1] - a[1])) / 960 < 14 + off)
+            if t > .55:
+                burst(g, 500, 210, t - .55, n=40, speed=600, seed=3)
+                shake = 8 * (1 - (t - .55) / .45)
+
+    elif t < 2.0:                     # 2 · an ink shield; an ASCII swarm breaks on it
+        u = t - 1.0
+        R = 92
+        ink.shape(ellipse(cx, cy, R, R * .92), w=LINE + 1, fill=BLUE if u > .45 else None,
+                  hatch=-.7 if u > .45 else None) if u > .12 else ink.line(arc(cx, cy, R, R * .92, 0, TAU * ease_out(u / .12), 40))
+        for p in range(140):
+            a = TAU * hsh(p, 11)
+            r0 = 520 + 200 * hsh(p, 12)
+            v = 900 + 300 * hsh(p, 13)
+            r = r0 - v * u
+            if r < R + 6:
+                r = R + 6 + (R + 6 - r) * .6
+            g.put(cx + math.cos(a) * r, cy + math.sin(a) * r * .9, dirch(a) if r > R + 20 else "*", "i" if p % 3 else "b")
+        if u > .45:
+            ring(g, cx, cy, R + 14 + (u - .45) * 420, "b")
+            shake = 6 * max(0, 1 - (u - .45) * 3)
+
+    elif t < 3.0:                     # 3 · ASCII lightning; the shield shatters
+        u = t - 2.0
+        R = 92
+        if u < .3:
+            ink.shape(ellipse(cx, cy, R, R * .92), w=LINE + 1, fill=BLUE, hatch=-.7)
+            for s in range(3):
+                if u > s * .08:
+                    bolt(g, 200 + s * 300, 0, cx + (s - 1) * 40, cy - R * .8, 31 + s + int(u * 24), "i")
+            flash = 0.12 < u < .2
+        else:
+            v = u - .3
+            for p in range(16):                       # shards fly out and spin
+                a0, a1 = TAU * p / 16, TAU * (p + 1) / 16
+                m = (a0 + a1) / 2
+                d = 600 * v * (.6 + .6 * hsh(p, 21))
+                rot = (hsh(p, 22) - .5) * 8 * v
+                pts = [(cx + math.cos(m) * d + math.cos(a + rot) * R, cy + math.sin(m) * d + math.sin(a + rot) * R * .92)
+                       for a in (a0, (a0 + a1) / 2, a1)]
+                ink.line(pts, w=LINE)
+            burst(g, cx, cy, v, n=90, speed=700, col="b", seed=9)
+            rain(g, t, dens=min(.4, .2 + v))
+            shake = 10 * max(0, 1 - v * 2.5)
+
+    elif t < 4.2:                     # 4 · ink waves against ASCII waves; they meet in the middle
+        u = t - 3.0
+        front = min(cx, 80 + 900 * u)
+        for w_ in range(3):
+            y0 = 120 + w_ * 90
+            pts = [(x, y0 + 26 * math.sin(x * .035 - u * 18 + w_)) for x in range(20, int(front), 12)]
+            if len(pts) > 1:
+                ink.line(pts, w=FINE, smooth=True, color=BLUE if w_ == 1 else INK)
+            for x in range(int(FW - 20), int(max(cx, FW - 80 - 900 * u)), -9):
+                y = y0 + 26 * math.sin(x * .035 + u * 18 + w_ + 1)
+                g.put(x, y, "~", "a" if w_ != 1 else "b")
+                g.put(x, y + 17, ".", "a")
+        if u > .5:
+            v = u - .5
+            burst(g, cx, cy, v, n=110, speed=760, col="i", seed=17)
+            burst(g, cx, cy, v * .8, n=60, speed=500, col="b", seed=23)
+            for s in range(5):
+                if v > s * .07:
+                    splat(ink, cx + math.cos(s * 2.4) * (120 + 260 * min(1, v * 2)),
+                          cy + math.sin(s * 2.4) * (80 + 120 * min(1, v * 2)), 16 + 6 * hsh(s, 1), s)
+            flash = v < .09
+            shake = 12 * max(0, 1 - v * 2)
+
+    elif t < 5.4:                     # 5 · an ASCII world spins up; the pen cages it, it breaks out
+        u = t - 4.2
+        R = 135 * snap(u / .25)
+        if R > 4:
+            sphere(g, cx, cy, R, u * 6)
+        for k in range(3):
+            kk = ease_out((u - .25 - k * .1) / .2)
+            if kk > 0 and u < .85:
+                ink.line(arc(cx, cy, 150 + k * 22, 44 + k * 10, -.3 + k, -.3 + k + TAU * kk, 48), w=FINE)
+        if u > .5:
+            bars = ease_out((u - .5) / .15)
+            for b_ in range(7):
+                x = cx - 135 + b_ * 45
+                if u < .85:
+                    ink.line([(x, 40), (x, 40 + 340 * bars)], w=FINE)
+        if u >= .85:
+            v = u - .85
+            for b_ in range(7):
+                x = cx - 135 + b_ * 45
+                a = (b_ - 3) * .5 * v * 6
+                ink.line([(x + v * (b_ - 3) * 300, 40 - v * 200 * abs(b_ - 3)),
+                          (x + v * (b_ - 3) * 300 + math.sin(a) * 340, 40 - v * 200 * abs(b_ - 3) + math.cos(a) * 340)], w=FINE)
+            burst(g, cx, cy, v * 1.6, n=80, speed=600, col="b", seed=41)
+            shake = 9 * max(0, 1 - v * 3)
+
+    elif t < 6.6:                     # 6 · chase: the pen nib zips around, an ASCII snake on its tail
+        u = t - 5.4
+        path = lambda s: (cx + 380 * math.sin(s * 2.1), cy + 140 * math.sin(s * 4.2 + .5))
+        s = u * 4.5
+        trail = [path(s - k * .02) for k in range(40)]
+        ink.line(trail[::-1], w=FINE, smooth=True)
+        x, y = path(s)
+        x2, y2 = path(s + .01)
+        nib(ink, x, y, math.atan2(y2 - y, x2 - x), 1.2)
+        for k in range(46):
+            px, py = path(s - .55 - k * .018)
+            g.put(px, py, "@" if k == 0 else "o=*+:~-."[min(7, k // 6)], "i" if k < 4 else ("b" if k < 16 else "a"))
+        rain(g, t, dens=.18)
+
+    elif t < 7.6:                     # 7 · tug of war: ink hatching against an ASCII field
+        u = t - 6.6
+        edge = cx + 260 * math.sin(u * 9) * (1 - u * .3)
+        poly = [(10, 10), (edge, 10), (edge + 30 * math.sin(u * 30), FH / 2), (edge, FH - 10), (10, FH - 10)]
+        for p, q in stripes(poly, -.8, 22):
+            ink.line([p, q], w=THIN)
+        ink.line([(edge, 10), (edge + 30 * math.sin(u * 30), FH / 2), (edge, FH - 10)], w=LINE + 1)
+        field(g, lambda x, y: x > edge + 18, t, dens=.38)
+        for j in range(ROWS):
+            g.put(edge + 26, 4 + j * LH, "|" if j % 2 else ":", "b")
+        shake = 4 * abs(math.cos(u * 9))
+
+    elif t < 8.6:                     # 8 · fireworks: ink stars against ASCII stars
+        u = t - 7.6
+        for n_ in range(6):
+            t0 = n_ * .14
+            if u < t0:
+                continue
+            v = u - t0
+            px = 140 + (n_ * 167) % 720
+            py = 90 + (n_ * 97) % 230
+            if n_ % 2 == 0:
+                rr = 70 * ease_out(v / .3)
+                for k in range(10):
+                    a = TAU * k / 10 + n_
+                    ink.line([(px + math.cos(a) * rr * .35, py + math.sin(a) * rr * .35),
+                              (px + math.cos(a) * rr, py + math.sin(a) * rr)], w=FINE,
+                             color=BLUE if k % 3 == 0 else INK)
+                if v < .12:
+                    ink.shape(ellipse(px, py, 8), w=FINE, fill=BLUE)
+            else:
+                burst(g, px, py, v * .8, n=40, speed=260, col="b" if n_ % 3 else "s", seed=50 + n_)
+        rain(g, t, dens=.12)
+
+    elif t < 9.6:                     # 9 · everything is pulled to the middle: ASCII becomes the name
+        u = t - 8.6
+        k = ease_out(u / .7)
+        for p in range(180):
+            a = TAU * hsh(p, 61) + u * 3
+            r = (520 * hsh(p, 62) + 60) * (1 - k)
+            if r > 30:
+                g.put(cx + math.cos(a) * r, cy + math.sin(a) * r * .8, CHARS[1 + p % 15], "a" if p % 4 else "b")
+        if u < .45:                                # ink strokes rush inward with the characters
+            for q in range(12):
+                a = TAU * q / 12 + .2
+                r1 = 480 * (1 - ease_out(u / .45)) + 60
+                ink.line([(cx + math.cos(a) * (r1 + 120), cy + math.sin(a) * (r1 + 120) * .8),
+                          (cx + math.cos(a) * r1, cy + math.sin(a) * r1 * .8)], w=FINE, color=BLUE if q % 4 == 0 else INK)
+        if u > .35:
+            txt = scramble(NAME, (u - .35) / .55, int(u * 24))
+            extra += (f'<text class="mono" x="{cx}" y="{cy + 18}" font-size="60" fill="{INK}" text-anchor="middle" '
+                      f'xml:space="preserve">{esc(txt)}</text>')
+        shake = 3 if u > .6 else 0
+
+    else:                             # 10 · ink takes the name; the ASCII scatters and settles into a skyline
+        u = t - 9.6
+        if u < .12:
+            flash = True
+        for m_ in mountains(COLS, 7, top=0, k=int(u * 3) % 2)[:7]:
+            pass
+        mt = mountains(COLS, 7, top=0, k=int(u * 3) % 2)
+        rise = ease_out((u - .4) / .6)
+        for j, row in enumerate(mt):
+            for i, ch in enumerate(row):
+                if ch != " " and hsh(i, j) < rise:
+                    g.put(4 + i * CW_, FH - (7 - j) * LH * rise, ch, "a")
+        if u < 1.0:
+            for p in range(len(NAME)):
+                if NAME[p] == " ":
+                    continue
+                x0 = cx + (p - len(NAME) / 2 + .5) * 36
+                a = TAU * hsh(p, 71)
+                d = 700 * ease_out(u / .9)
+                g.put(x0 + math.cos(a) * d, cy + math.sin(a) * d * .6, NAME[p], "a")
+            burst(g, cx, cy, u, n=70, speed=650, col="a", seed=77)
+        sc = snap(u / .25)
+        extra += (f'<text x="{cx}" y="{cy + 22}" class="serif" font-size="{78 * max(.01, sc):.1f}" fill="{INK}" '
+                  f'text-anchor="middle">{NAME}</text>')
+        under = [(310 + 380 * j / 12, cy + 50 + math.sin(j * 1.1) * 2.4) for j in range(13)]
+        ink.line(under, w=FINE, smooth=True, k=ease_out((u - .25) / .3), color=BLUE)
+        for s_ in range(4):                       # a few last ink flecks
+            if .2 < u < .7:
+                splat(ink, cx + (s_ - 1.5) * 220, cy - 120 + 230 * (s_ % 2), 9 * (1 - (u - .2) * 1.6) + 1, s_ + 90)
+        shake = 6 * max(0, 1 - u * 4)
+
+    sx = (hsh(int(t * FPS), 1) - .5) * 2 * shake
+    sy = (hsh(int(t * FPS), 2) - .5) * 2 * shake
+    return g.svg(), ink.svg() + extra, (sx, sy), flash
 
 
 def film():
-    W, H, T = 1000, 420, 14.0
-    f = Film(T)
-    flip = Flip(f)
-    shots, texts, mono = [], set(), set()
-    CUTS = [0.0, 3.5, 7.0, 10.5]
-
-    # ---------------- 1 · a soldering iron touches the joint; ASCII smoke rises
-    t0, g = 0.0, []
-    board = rounded(110, 262, 360, 64, 12)
-    g.append(f.ink(lambda b: draw(board, b, w=FINE, closed=True)
-                   + "".join(draw([(x, 284), (x + 1, 304)], b, w=THIN) for x in range(150, 431, 40))))
-    body = rounded(232, 214, 104, 34, 17)
-    g.append(f.ink(lambda b: draw(body, b, closed=True)
-                   + draw([(232, 231), (180, 231), (180, 262)], b, w=FINE)
-                   + draw([(336, 231), (392, 231), (392, 258)], b, w=FINE)
-                   + "".join(draw([(x, 219), (x + 1, 243)], b, w=THIN) for x in (262, 282, 302))))
-    joint = ellipse(392, 262, 15, 9)
-    k = f.pop(t0 + 1.2)
-    g.append(f'<g class="{k}" style="transform-origin:392px 262px">{f.ink(lambda b: spot(joint, b, gap=6))}</g>')
-    iron = lambda b: (draw([(398, 250), (434, 202)], b, w=FINE)
-                      + draw([(424, 214), (448, 180), (500, 112), (518, 124), (466, 192), (442, 226)], b, closed=True)
-                      + draw([(509, 118), (556, 56)], b, w=FINE)
-                      + draw([(462, 160), (478, 172)], b, w=THIN) + draw([(474, 144), (490, 156)], b, w=THIN))
-    k = f.anim([(0, "transform:translate(130px,-100px) rotate(10deg)"),
-                (t0 + .45, "transform:translate(130px,-100px) rotate(10deg)", SNAP),
-                (t0 + .95, "transform:translate(0,0) rotate(0)"),
-                (t0 + 2.5, "transform:translate(0,0) rotate(0)", SNAP),
-                (t0 + 2.95, "transform:translate(80px,-70px) rotate(6deg)"),
-                (T, "transform:translate(80px,-70px) rotate(6deg)")])
-    g.append(f'<g class="{k}" style="transform-origin:398px 250px">{f.ink(iron)}</g>')
-    sm = smoke_frames()
-    mono.update("".join("".join(r) for r in fr) for fr in sm)
-    k = f.fade(t0 + 1.25, t0 + 1.5, t0 + 3.0, t0 + 3.4)
-    g.append(f'<g class="{k}">{flip(sm, 318, 66, 15, 15, 1.6, INK, .85)}</g>')
-    sp = [["  .  *  ,", " ' \\ | / .", "*-- o --*", " , / | \\ '", "  .  *  ."]]
-    mono.update("".join(sp[0]))
-    k = f.fade(t0 + 1.0, t0 + 1.05, t0 + 1.3, t0 + 1.45)
-    g.append(f'<g class="{k}">{rows_text(sp[0], 366, 240, 11, 9, SAND)}</g>')
-    g.append(caption("I solder things."))
-    texts.add("I solder things.")
-    shots.append((t0, t0 + 3.5, g))
-
-    # ---------------- 2 · the scope: static on the glass, a wave, the knob turns, a glowing faster wave
-    t0, g = 3.5, []
-    st = static_frames(33, 10)
-    mono.update("".join("".join(r) for r in fr) for fr in st)
-    g.append(flip(st, 150, 134, 13, 15.5, .5, INK, .38))
-    screen = rounded(130, 104, 300, 196, 18)
-    g.append(f.ink(lambda b: draw(screen, b, closed=True)
-                   + draw([(150, 202), (410, 202)], b, w=THIN) + draw([(280, 122), (281, 282)], b, w=THIN)
-                   + draw([(172, 300), (162, 324)], b, w=FINE) + draw([(388, 300), (398, 324)], b, w=FINE)))
-    for i, (amp, per, a, e) in enumerate(((40, 2.0, t0 + .35, t0 + 1.35), (58, 4.0, t0 + 1.95, t0 + 2.55))):
-        wave = [(152 + 256 * j / 72, 202 - amp * math.sin(TAU * per * j / 72)) for j in range(73)]
-        k = f.fade(t0, t0 + .01, t0 + 1.9, t0 + 1.95) if i == 0 else f.fade(t0 + 1.95, t0 + 1.96)
-        g.append(f'<g class="{k}">' + f.ink((lambda wv: lambda b: draw(wv, b, w=FINE, smooth=True))(wave),
-                                            draw_on=(a, e)) + "</g>")
-    # phosphor: ASCII glow hugging the fast wave
-    gl = []
-    for kk in range(4):
-        fr = []
-        for j in range(11):
-            line = ""
-            for i in range(33):
-                x = 152 + i * 7.8
-                y = 129 + j * 15.5
-                wy = 202 - 58 * math.sin(TAU * 4 * (x - 152) / 256)
-                d = abs(y - wy) / 15.5
-                line += (".:+"[min(2, int((1.6 - d) * 1.6))] if d < 1.6 and hsh(i + kk * 7, j) < .75 - d * .3 else " ")
-            fr.append(line)
-        gl.append(fr)
-    mono.update("".join("".join(r) for r in fr) for fr in gl)
-    k = f.fade(t0 + 2.4, t0 + 2.7)
-    g.append(f'<g class="{k}">{flip(gl, 152, 134, 13, 15.5, .5, BLUE, .55)}</g>')
-    knob = ellipse(478, 150, 22)
-    g.append(f.ink(lambda b: spot(knob, b, a=.7)))
-    k = f.anim([(0, "transform:rotate(-70deg)"), (t0 + 1.6, "transform:rotate(-70deg)", SNAP),
-                (t0 + 1.95, "transform:rotate(40deg)"), (T, "transform:rotate(40deg)")])
-    g.append(f'<g class="{k}" style="transform-origin:478px 150px">'
-             + f.ink(lambda b: draw([(478, 152), (478, 120)], b, w=LINE)) + "</g>")
-    g.append(f.ink(lambda b: draw(ellipse(478, 228, 13), b, closed=True, w=FINE)
-                   + draw([(478, 228), (487, 219)], b, w=THIN)))
-    g.append(caption("I measure them."))
-    texts.add("I measure them.")
-    shots.append((t0, t0 + 3.5, g))
-
-    # ---------------- 3 · a wire reaches the bulb; it lights and ASCII light spills out
-    t0, g = 7.0, []
-    hl = glow_frames(48, 22, 24, 9.6, 5.2, 11)
-    mono.update("".join("".join(r) for r in fr) for fr in hl)
-    k = f.fade(t0 + 1.3, t0 + 1.6)
-    g.append(f'<g class="{k}">{flip(hl, 392 - 24 * 7.8, 172 - 9.6 * 15.5 + 4, 13, 15.5, .5, BLUE, .7)}</g>')
-    g.append(f.ink(lambda b: draw(rounded(130, 214, 70, 112, 10), b, closed=True)
-                   + draw(rounded(152, 200, 26, 14, 4), b, closed=True, w=FINE)
-                   + draw([(157, 246), (173, 246)], b, w=THIN) + draw([(165, 238), (165, 254)], b, w=THIN)
-                   + draw([(157, 298), (173, 298)], b, w=THIN)))
-    wire = [(165, 200), (172, 150), (232, 132), (272, 196), (300, 292), (346, 304), (368, 290)]
-    g.append(f.ink(lambda b: draw(wire, b, w=FINE, smooth=True), draw_on=(t0 + .3, t0 + 1.2)))
-    glass = [(372, 252)] + arc(392, 172, 66, 66, math.pi * .62, math.pi * 2.38, 40) + [(412, 252)]
-    k = f.fade(t0 + 1.25, t0 + 1.32)
-    g.append(f'<g class="{k}">' + f.ink(lambda b: draw(glass, b, fill=BLUE, closed=True, w=0)
-                                        + "".join(draw([p, q], b, w=THIN) for p, q in stripes(glass, -.6, 10)))
-             + "</g>")
-    g.append(f.ink(lambda b: draw(glass, b, closed=True)
-                   + draw(rounded(368, 252, 48, 40, 8), b, closed=True, w=FINE)
-                   + draw([(370, 266), (414, 264)], b, w=THIN) + draw([(370, 278), (414, 276)], b, w=THIN)
-                   + draw([(381, 252), (381, 204), (388, 190), (396, 204), (404, 190), (404, 252)], b, w=THIN)))
-    g.append(caption("Then they light up."))
-    texts.add("Then they light up.")
-    shots.append((t0, t0 + 3.5, g))
-
-    # ---------------- 4 · the name decodes out of ASCII into ink, over Clem's ASCII range (also the still frame)
-    t0, g = 10.5, []
-    name, sub = "Mohamed Mowafy", "electronics engineering student · cairo"
-    texts.update([name, sub])
-    mt = [mountains(120, 9, top=0, k=kk) for kk in range(2)]
-    sky = [["".join(("." if hsh(i * 13 + kk, j * 7) < .5 else "'") if hsh(i * 3, j * 11) < .02 else " "
-                    for i in range(120)) for j in range(9)] for kk in range(2)]
-    for fr in mt + sky:
-        mono.update("".join(fr))
-    g.append(flip(sky, 0, 22, 14, 17, 1.4, ASH))
-    g.append(rows_text(mt[0], 0, 286, 14, 17, ASH))
-    letters = "MOHAMEDWFY@#%&*+=~^/\\<>01"
-    mono.update(name + letters)
-    steps = 10
-    for s_ in range(steps):
-        prog = (s_ + 1) / steps
-        txt = "".join(c if (c == " " or hsh(i, 3) < prog * 1.2 - .1) else letters[int(hsh(i, s_ + 9) * len(letters))]
-                      for i, c in enumerate(name))
-        a = t0 + .15 + s_ * .08
-        k = f.windows([(a, a + .08)] if s_ < steps - 1 else [(a, t0 + 1.25)])
-        g.append(f'<text class="mono {k}" style="opacity:0" x="{W/2}" y="200" font-size="58" fill="{INK}" '
-                 f'text-anchor="middle" xml:space="preserve">{esc(txt)}</text>')
-    k = f.anim([(0, "opacity:0"), (t0 + 1.0, "opacity:0"), (t0 + 1.3, "opacity:1"), (T, "opacity:1")])
-    g.append(f'<g class="{k}"><rect x="200" y="128" width="600" height="100" fill="{BG}" opacity=".85" rx="20"/>'
-             f'<text x="{W/2}" y="208" class="serif" font-size="78" fill="{INK}" text-anchor="middle">{name}</text></g>')
-    under = [(310 + 380 * j / 12, 240 + math.sin(j * 1.1) * 2.4) for j in range(13)]
-    g.append(f.ink(lambda b: draw(under, b, w=FINE, smooth=True, color=BLUE), draw_on=(t0 + 1.3, t0 + 1.9)))
-    k = f.fade(t0 + 1.6, t0 + 2.0)
-    g.append(f'<text class="sans {k}" x="{W/2}" y="292" font-size="20" fill="{SOFT}" text-anchor="middle" '
-             f'letter-spacing=".4">{esc(sub)}</text>')
-    shots.append((t0, T, g))
-
-    # ---------------- cuts: an ASCII dissolve sweeps over every change of shot
-    body = []
-    for i, (a, b, g) in enumerate(shots):
-        if i == len(shots) - 1:
-            k = f.anim([(0, "opacity:0"), (a, "opacity:0", "step-end"), (a + .001, "opacity:1"),
-                        (b - .001, "opacity:1", "step-end"), (b, "opacity:0")])
-            body.append(f'<g class="{k}">{"".join(g)}</g>')
-        else:
-            k = f.anim([(0, "opacity:1" if a == 0 else "opacity:0"), (a, "opacity:0" if a else "opacity:1", "step-end"),
-                        (a + .001, "opacity:1"), (b, "opacity:1", "step-end"), (b + .001, "opacity:0"),
-                        (T, "opacity:0")])
-            body.append(f'<g class="{k} still-off">{"".join(g)}</g>')
-    dens = [.1, .3, .58, .88, .88, .58, .3, .1]
-    dt = .07
-    for n_, d in enumerate(dens):
-        fr = []
-        for j in range(25):
-            line = ""
-            for i in range(119):
-                sweep = d + .35 * (i / 118 - .5) * (1 if n_ < 4 else -1)
-                line += CHARS[1 + int(hsh(i + n_ * 3, j) * 15)] if hsh(i * 7 + n_, j * 13) < sweep else " "
-            fr.append(line)
-        mono.update("".join(fr))
-        wins = []
-        for c in CUTS:
-            s0 = c - 4 * dt + n_ * dt
-            if s0 < 0:
-                wins.append((s0 + T, s0 + T + dt))
-            else:
-                wins.append((s0, s0 + dt))
-        k = f.windows([(a, min(T, b)) for a, b in wins])
-        body.append(f'<g class="{k} still-off" style="opacity:0"><rect width="{W}" height="{H}" rx="16" fill="{BG}" '
-                    f'opacity="{min(1, d * 1.05):.2f}"/>{rows_text(fr, 4, 17, 14, 17, INK, .8)}</g>')
-
-    css = (font_face("MS", "MowafySerif-Regular.woff2", "".join(texts))
-           + font_face("MN", "MowafySans-Regular.woff2", "".join(texts))
-           + font_face("JM", "JetBrainsMono.woff2", "".join(mono))
-           + ".serif{font-family:MS,Georgia,serif;letter-spacing:-.5px}.sans{font-family:MN,system-ui,sans-serif}"
-           + ".mono{font-family:JM,ui-monospace,monospace;white-space:pre}"
-           + "@keyframes bo{0%{visibility:visible}33.33%,100%{visibility:hidden}}"
-           + ".b{animation:bo .5s step-end infinite}.b1{animation-delay:-.3333s}.b2{animation-delay:-.1667s}"
-           + "".join(f.css)
-           + "@media (prefers-reduced-motion:reduce){*{animation:none!important}.b1,.b2,.still-off{display:none}}")
-    alt = ("A short film in ink and ASCII: a soldering iron touches a joint as ASCII smoke rises, an oscilloscope "
-           "draws a wave, a bulb lights up and spills ASCII light, then the name Mohamed Mowafy decodes out of "
-           "characters over an ASCII mountain range: electronics engineering student in Cairo.")
-    return (f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" viewBox="0 0 {W} {H}" role="img" '
+    n = int(T * FPS)
+    hold_from = int(10.6 * FPS)          # from here the name just boils: reuse a short cycle of drawings
+    css_frames, groups, cache = [], [], {}
+    for i in range(n):
+        t = i / FPS
+        key = i if i < hold_from else hold_from + (i - hold_from) % 6
+        cache.setdefault(key, []).append(i)
+    COMPACT[0] = True
+    for key, idxs in cache.items():
+        t = key / FPS
+        a, ink, (sx, sy), flash = frame(t)
+        body = a + ink
+        if flash:
+            body = f'<rect width="{FW}" height="{FH}" fill="{INK}"/><g style="filter:invert(1)">{body}</g>'
+        if sx or sy:
+            body = f'<g transform="translate({sx:.1f} {sy:.1f})">{body}</g>'
+        cls = f"q{key}"
+        stops = []
+        for i in idxs:
+            stops.append(f"{i / n * 100:.3f}%{{visibility:visible}}{(i + 1) / n * 100:.3f}%{{visibility:hidden}}")
+        css_frames.append(f"@keyframes {cls}{{0%{{visibility:hidden}}{''.join(stops)}100%{{visibility:hidden}}}}"
+                          f".{cls}{{animation:{cls} {T}s step-end infinite}}")
+        still = ' style="visibility:visible"' if key == hold_from else ""
+        groups.append(f'<g class="{cls} fr"{still}>{body}</g>')
+    COMPACT[0] = False
+    mono = CHARS + "@#%&*+=~^/\\<>01|" + NAME + "MOHAMEDWFY" + "".join(sorted(set(".:,'`-^")))
+    css = (font_face("MS", "MowafySerif-Regular.woff2", NAME)
+           + font_face("JM", "JetBrainsMono.woff2", mono + " .:-=+*#%@")
+           + ".serif{font-family:MS,Georgia,serif;letter-spacing:-.5px}"
+           + ".mono{font-family:JM,ui-monospace,monospace;white-space:pre}.fr{visibility:hidden}"
+           + f".L{{fill:none;stroke:{INK};stroke-linecap:round;stroke-linejoin:round}}"
+           + "".join(css_frames)
+           + "@media (prefers-reduced-motion:reduce){*{animation:none!important}}")
+    alt = ("A fast animated fight between ink drawings and ASCII characters: a pen slashes through falling "
+           "characters, a shield breaks under ASCII lightning, waves collide, a pen nib is chased by a character "
+           "snake, and it ends with the name Mohamed Mowafy.")
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" width="{FW}" height="{FH}" viewBox="0 0 {FW} {FH}" role="img" '
             f'aria-label="{esc(alt)}"><title>Mohamed Mowafy</title><style>{css}</style>'
-            f'<rect width="{W}" height="{H}" rx="16" fill="{BG}"/>{"".join(body)}</svg>')
+            f'<defs><clipPath id="stage"><rect width="{FW}" height="{FH}" rx="16"/></clipPath></defs>'
+            f'<g clip-path="url(#stage)"><rect width="{FW}" height="{FH}" fill="{BG}"/>{"".join(groups)}</g></svg>')
 
 
 # ------------------------------------------------------------------ cards: a designed picture of each project
@@ -646,9 +780,8 @@ def readme():
     cards = "".join(f'<a href="{c["url"]}"><img src="assets/card-{c["slug"]}.svg" width="423" '
                     f'alt="{c["name"]}: {c["desc"]}"></a>' for c in CARDS)
     return "\n".join([
-        '<a href="https://mohamedmowafy.com"><img src="assets/film.svg" width="100%" alt="A short film in ink and '
-        'ASCII: a soldering iron, an oscilloscope, a bulb lighting up, then Mohamed Mowafy, electronics engineering '
-        'student in Cairo."></a>',
+        '<a href="https://mohamedmowafy.com"><img src="assets/film.svg" width="100%" alt="A fast fight between ink '
+        'drawings and ASCII characters that ends with the name Mohamed Mowafy."></a>',
         "",
         f'<p align="center">{cards}</p>',
         "",
