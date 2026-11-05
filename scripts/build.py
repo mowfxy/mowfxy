@@ -418,7 +418,29 @@ def splat(ink, cx, cy, r, seed):
         ink.out.append(draw([p, q], ink.b, w=THIN))
 
 
-# ---------------- the fight, beat by beat
+# ---------------- the show: ink and ASCII take turns stealing the frame
+INTRO = 7.6
+
+
+def star(cx, cy, r, n=5, inner=.45, rot=-math.pi / 2):
+    return [(cx + math.cos(rot + math.pi * k / n) * (r if k % 2 == 0 else r * inner),
+             cy + math.sin(rot + math.pi * k / n) * (r if k % 2 == 0 else r * inner)) for k in range(2 * n)]
+
+
+def heart(cx, cy, r):
+    return [(cx + r * 16 * math.sin(a) ** 3 / 17, cy - r * (13 * math.cos(a) - 5 * math.cos(2 * a) - 2 * math.cos(3 * a)
+                                                         - math.cos(4 * a)) / 17) for a in [TAU * k / 40 for k in range(40)]]
+
+
+def ascii_shape(g, poly, col="i", fill=True, ch="#"):
+    xs = [p[0] for p in poly]; ys = [p[1] for p in poly]
+    for j in range(int(min(ys) / LH) - 1, int(max(ys) / LH) + 2):
+        for i in range(int(min(xs) / CW_) - 1, int(max(xs) / CW_) + 2):
+            x, y = 4 + i * CW_, 4 + j * LH
+            if inside(poly, (x, y)):
+                g.put(x, y, ch if fill else ".", col)
+
+
 def frame(t):
     """Everything on screen at time t: (ascii svg, ink svg, shake, flash)."""
     SEED[0] = 0
@@ -426,251 +448,228 @@ def frame(t):
     shake, flash, extra = 0.0, False, ""
     cx, cy = FW / 2, FH / 2
 
-    if t < 1.0:                       # 1 · ASCII rain; an ink slash cuts it in two
-        rain(g, t, dens=.55)
-        k = ease_out((t - .35) / .2)
-        a, b = (60, 20), (940, 400)
-        if k > 0:
-            ink.line([a, b], w=LINE + 1.5, k=k)
-            off = (t - .55) * 260 if t > .55 else 0
-            g.clear(lambda x, y: abs((y - a[1]) * (b[0] - a[0]) - (x - a[0]) * (b[1] - a[1])) / 960 < 14 + off)
-            if t > .55:
-                burst(g, 500, 210, t - .55, n=40, speed=600, seed=3)
-                shake = 8 * (1 - (t - .55) / .45)
+    if t < .9:                        # 1 · a dot of ink; a bigger @ beside it; a ring of ink; a bigger ring of ASCII
+        u = t
+        r = 6 + 60 * snap((u - .05) / .25) + 70 * snap((u - .5) / .2)
+        ink.shape(ellipse(cx - 40, cy, max(4, r * .5)), w=LINE, fill=BLUE if u > .5 else INK)
+        if u > .2:
+            ring(g, cx - 40, cy, r * .5 + 40 + 120 * ease_out((u - .6) / .3), "i", ch=None)
+            g.put(cx + 120 - 200 * ease_out((u - .6) / .3), cy, "@", "b")
+        if u > .62:
+            ring(g, cx - 40, cy, r * .5 + 70 + 200 * ease_out((u - .62) / .28), "a")
 
-    elif t < 2.0:                     # 2 · an ink shield; an ASCII swarm breaks on it
-        u = t - 1.0
-        R = 92
-        ink.shape(ellipse(cx, cy, R, R * .92), w=LINE + 1, fill=BLUE if u > .45 else None,
-                  hatch=-.7 if u > .45 else None) if u > .12 else ink.line(arc(cx, cy, R, R * .92, 0, TAU * ease_out(u / .12), 40))
-        for p in range(140):
-            a = TAU * hsh(p, 11)
-            r0 = 520 + 200 * hsh(p, 12)
-            v = 900 + 300 * hsh(p, 13)
-            r = r0 - v * u
-            if r < R + 6:
-                r = R + 6 + (R + 6 - r) * .6
-            g.put(cx + math.cos(a) * r, cy + math.sin(a) * r * .9, dirch(a) if r > R + 20 else "*", "i" if p % 3 else "b")
-        if u > .45:
-            ring(g, cx, cy, R + 14 + (u - .45) * 420, "b")
-            shake = 6 * max(0, 1 - (u - .45) * 3)
+    elif t < 1.8:                     # 2 · an ink bulb lights; an ASCII sun rises behind it, brighter and bigger
+        u = t - .9
+        R = 170 * snap((u - .3) / .3)
+        if R > 5:
+            for p in range(90):
+                a = TAU * p / 90 + u * 2
+                for q in range(3):
+                    rr = R + 20 + q * 22 + 10 * math.sin(p * 1.7 + u * 20)
+                    if hsh(p, q) < .7:
+                        g.put(cx + 140 + math.cos(a) * rr, cy + math.sin(a) * rr * .85, dirch(a), "s" if q == 0 else "a")
+            sphere(g, cx + 140, cy, R * .7, u * 3, col="s", dim="a")
+        glass = [(cx - 172, cy + 40)] + arc(cx - 150, cy - 30, 62, 62, math.pi * .62, math.pi * 2.38, 40) + [(cx - 128, cy + 40)]
+        lit = u > .2
+        ink.shape(glass, w=LINE, fill=BLUE if lit else None, hatch=-.6 if lit else None)
+        ink.shape(rounded(cx - 174, cy + 40, 48, 38, 8), w=FINE)
+        if lit:
+            for k in range(7):
+                a = math.pi * (1 + k / 6)
+                rr = 80 + 30 * snap((u - .2 - k * .03) / .2)
+                ink.line([(cx - 150 + math.cos(a) * 78, cy - 30 + math.sin(a) * 78),
+                          (cx - 150 + math.cos(a) * rr, cy - 30 + math.sin(a) * rr)], w=FINE)
 
-    elif t < 3.0:                     # 3 · ASCII lightning; the shield shatters
-        u = t - 2.0
-        R = 92
-        if u < .3:
-            ink.shape(ellipse(cx, cy, R, R * .92), w=LINE + 1, fill=BLUE, hatch=-.7)
-            for s in range(3):
-                if u > s * .08:
-                    bolt(g, 200 + s * 300, 0, cx + (s - 1) * 40, cy - R * .8, 31 + s + int(u * 24), "i")
-            flash = 0.12 < u < .2
-        else:
-            v = u - .3
-            for p in range(16):                       # shards fly out and spin
-                a0, a1 = TAU * p / 16, TAU * (p + 1) / 16
-                m = (a0 + a1) / 2
-                d = 600 * v * (.6 + .6 * hsh(p, 21))
-                rot = (hsh(p, 22) - .5) * 8 * v
-                pts = [(cx + math.cos(m) * d + math.cos(a + rot) * R, cy + math.sin(m) * d + math.sin(a + rot) * R * .92)
-                       for a in (a0, (a0 + a1) / 2, a1)]
-                ink.line(pts, w=LINE)
-            burst(g, cx, cy, v, n=90, speed=700, col="b", seed=9)
-            rain(g, t, dens=min(.4, .2 + v))
-            shake = 10 * max(0, 1 - v * 2.5)
+    elif t < 2.8:                     # 3 · an ink wave crosses the frame; ASCII bars jump up through it
+        u = t - 1.8
+        k = ease_out(u / .4)
+        pts = [(x, cy + 70 * math.sin(x * .022 - u * 12)) for x in range(20, int(20 + 960 * k), 12)]
+        if len(pts) > 1:
+            ink.line(pts, w=LINE + .5, smooth=True)
+            ink.line([(x, y + 24) for x, y in pts], w=THIN, smooth=True, color=BLUE)
+        if u > .3:
+            for i in range(0, COLS, 2):
+                h = (ROWS * .9) * (.15 + .85 * abs(math.sin(i * .37 + u * 9) * math.sin(i * .11 - u * 5)))
+                h *= ease_out((u - .3) / .25)
+                for j in range(int(h)):
+                    g.put(4 + i * CW_, FH - 8 - j * LH, "|" if j < h - 1 else "^", "b" if j >= h - 2 else "a")
+                    if j % 2 == 0:
+                        g.put(4 + (i + 1) * CW_, FH - 8 - j * LH, ":", "a")
 
-    elif t < 4.2:                     # 4 · ink waves against ASCII waves; they meet in the middle
-        u = t - 3.0
-        front = min(cx, 80 + 900 * u)
-        for w_ in range(3):
-            y0 = 120 + w_ * 90
-            pts = [(x, y0 + 26 * math.sin(x * .035 - u * 18 + w_)) for x in range(20, int(front), 12)]
-            if len(pts) > 1:
-                ink.line(pts, w=FINE, smooth=True, color=BLUE if w_ == 1 else INK)
-            for x in range(int(FW - 20), int(max(cx, FW - 80 - 900 * u)), -9):
-                y = y0 + 26 * math.sin(x * .035 + u * 18 + w_ + 1)
-                g.put(x, y, "~", "a" if w_ != 1 else "b")
-                g.put(x, y + 17, ".", "a")
-        if u > .5:
-            v = u - .5
-            burst(g, cx, cy, v, n=110, speed=760, col="i", seed=17)
-            burst(g, cx, cy, v * .8, n=60, speed=500, col="b", seed=23)
-            for s in range(5):
-                if v > s * .07:
-                    splat(ink, cx + math.cos(s * 2.4) * (120 + 260 * min(1, v * 2)),
-                          cy + math.sin(s * 2.4) * (80 + 120 * min(1, v * 2)), 16 + 6 * hsh(s, 1), s)
-            flash = v < .09
-            shake = 12 * max(0, 1 - v * 2)
-
-    elif t < 5.4:                     # 5 · an ASCII world spins up; the pen cages it, it breaks out
-        u = t - 4.2
-        R = 135 * snap(u / .25)
+    elif t < 3.8:                     # 4 · an ASCII planet; the pen gives it rings and a moon and takes the eye back
+        u = t - 2.8
+        R = 120 * snap(u / .2)
         if R > 4:
-            sphere(g, cx, cy, R, u * 6)
+            sphere(g, cx, cy, R, u * 5)
         for k in range(3):
-            kk = ease_out((u - .25 - k * .1) / .2)
-            if kk > 0 and u < .85:
-                ink.line(arc(cx, cy, 150 + k * 22, 44 + k * 10, -.3 + k, -.3 + k + TAU * kk, 48), w=FINE)
+            kk = ease_out((u - .25 - k * .08) / .22)
+            if kk > 0:
+                ink.line(arc(cx, cy, 190 + k * 30, 46 + k * 12, -.4, -.4 + TAU * kk, 52), w=FINE + (1 if k == 0 else 0),
+                         color=BLUE if k == 1 else INK)
         if u > .5:
-            bars = ease_out((u - .5) / .15)
-            for b_ in range(7):
-                x = cx - 135 + b_ * 45
-                if u < .85:
-                    ink.line([(x, 40), (x, 40 + 340 * bars)], w=FINE)
-        if u >= .85:
-            v = u - .85
-            for b_ in range(7):
-                x = cx - 135 + b_ * 45
-                a = (b_ - 3) * .5 * v * 6
-                ink.line([(x + v * (b_ - 3) * 300, 40 - v * 200 * abs(b_ - 3)),
-                          (x + v * (b_ - 3) * 300 + math.sin(a) * 340, 40 - v * 200 * abs(b_ - 3) + math.cos(a) * 340)], w=FINE)
-            burst(g, cx, cy, v * 1.6, n=80, speed=600, col="b", seed=41)
-            shake = 9 * max(0, 1 - v * 3)
-
-    elif t < 6.6:                     # 6 · chase: the pen nib zips around, an ASCII snake on its tail
-        u = t - 5.4
-        path = lambda s: (cx + 380 * math.sin(s * 2.1), cy + 140 * math.sin(s * 4.2 + .5))
-        s = u * 4.5
-        trail = [path(s - k * .02) for k in range(40)]
-        ink.line(trail[::-1], w=FINE, smooth=True)
-        x, y = path(s)
-        x2, y2 = path(s + .01)
-        nib(ink, x, y, math.atan2(y2 - y, x2 - x), 1.2)
-        for k in range(46):
-            px, py = path(s - .55 - k * .018)
-            g.put(px, py, "@" if k == 0 else "o=*+:~-."[min(7, k // 6)], "i" if k < 4 else ("b" if k < 16 else "a"))
-        rain(g, t, dens=.18)
-
-    elif t < 7.6:                     # 7 · tug of war: ink hatching against an ASCII field
-        u = t - 6.6
-        edge = cx + 260 * math.sin(u * 9) * (1 - u * .3)
-        poly = [(10, 10), (edge, 10), (edge + 30 * math.sin(u * 30), FH / 2), (edge, FH - 10), (10, FH - 10)]
-        for p, q in stripes(poly, -.8, 22):
-            ink.line([p, q], w=THIN)
-        ink.line([(edge, 10), (edge + 30 * math.sin(u * 30), FH / 2), (edge, FH - 10)], w=LINE + 1)
-        field(g, lambda x, y: x > edge + 18, t, dens=.38)
-        for j in range(ROWS):
-            g.put(edge + 26, 4 + j * LH, "|" if j % 2 else ":", "b")
-        shake = 4 * abs(math.cos(u * 9))
-
-    elif t < 8.6:                     # 8 · fireworks: ink stars against ASCII stars
-        u = t - 7.6
-        for n_ in range(6):
-            t0 = n_ * .14
-            if u < t0:
-                continue
-            v = u - t0
-            px = 140 + (n_ * 167) % 720
-            py = 90 + (n_ * 97) % 230
-            if n_ % 2 == 0:
-                rr = 70 * ease_out(v / .3)
-                for k in range(10):
-                    a = TAU * k / 10 + n_
-                    ink.line([(px + math.cos(a) * rr * .35, py + math.sin(a) * rr * .35),
-                              (px + math.cos(a) * rr, py + math.sin(a) * rr)], w=FINE,
-                             color=BLUE if k % 3 == 0 else INK)
-                if v < .12:
-                    ink.shape(ellipse(px, py, 8), w=FINE, fill=BLUE)
-            else:
-                burst(g, px, py, v * .8, n=40, speed=260, col="b" if n_ % 3 else "s", seed=50 + n_)
+            a = (u - .5) * 7
+            ink.shape(ellipse(cx + math.cos(a) * 250, cy + math.sin(a) * 64, 18), w=FINE, fill=BLUE, hatch=.7)
         rain(g, t, dens=.12)
 
-    elif t < 9.6:                     # 9 · everything is pulled to the middle: ASCII becomes the name
-        u = t - 8.6
-        k = ease_out(u / .7)
-        for p in range(180):
-            a = TAU * hsh(p, 61) + u * 3
-            r = (520 * hsh(p, 62) + 60) * (1 - k)
-            if r > 30:
-                g.put(cx + math.cos(a) * r, cy + math.sin(a) * r * .8, CHARS[1 + p % 15], "a" if p % 4 else "b")
-        if u < .45:                                # ink strokes rush inward with the characters
-            for q in range(12):
-                a = TAU * q / 12 + .2
-                r1 = 480 * (1 - ease_out(u / .45)) + 60
-                ink.line([(cx + math.cos(a) * (r1 + 120), cy + math.sin(a) * (r1 + 120) * .8),
-                          (cx + math.cos(a) * r1, cy + math.sin(a) * r1 * .8)], w=FINE, color=BLUE if q % 4 == 0 else INK)
-        if u > .35:
-            txt = scramble(NAME, (u - .35) / .55, int(u * 24))
-            extra += (f'<text class="mono" x="{cx}" y="{cy + 18}" font-size="60" fill="{INK}" text-anchor="middle" '
-                      f'xml:space="preserve">{esc(txt)}</text>')
-        shake = 3 if u > .6 else 0
+    elif t < 4.9:                     # 5 · rapid turns: each thing drawn in ink, then answered in ASCII
+        u = t - 3.8
+        beat = int(u / .22)
+        side = beat % 2
+        shapes = [lambda x, y, r: star(x, y, r), lambda x, y, r: heart(x, y, r * .9),
+                  lambda x, y, r: rounded(x - r, y - r * .7, r * 2, r * 1.4, r * .3),
+                  lambda x, y, r: [(x - r, y - r * .6), (x + r * .2, y - r * .6), (x + r * .2, y - r),
+                                   (x + r, y), (x + r * .2, y + r), (x + r * .2, y + r * .6), (x - r, y + r * .6)],
+                  lambda x, y, r: ellipse(x, y, r, r * .6)]
+        sh = shapes[beat % len(shapes)]
+        uu = (u % .22) / .22
+        r = 90 + 40 * snap(uu / .4)
+        px = cx + (-200 if side == 0 else 200)
+        poly = sh(px, cy, r)
+        if side == 0:
+            ink.shape(poly, w=LINE + 1, fill=BLUE if beat % 4 == 0 else None, hatch=-.7 if beat % 4 == 0 else None)
+            prev = shapes[(beat - 1) % len(shapes)](cx + 200, cy, 80) if beat else None
+            if prev:
+                ascii_shape(g, prev, "a", ch="+")
+        else:
+            ascii_shape(g, poly, "i" if beat % 3 else "b")
+            ink.shape(shapes[(beat - 1) % len(shapes)](cx - 200, cy, 80), w=THIN)
+        shake = 3 if uu < .2 else 0
 
-    else:                             # 10 · ink takes the name; the ASCII scatters and settles into a skyline
-        u = t - 9.6
-        if u < .12:
-            flash = True
-        for m_ in mountains(COLS, 7, top=0, k=int(u * 3) % 2)[:7]:
-            pass
-        mt = mountains(COLS, 7, top=0, k=int(u * 3) % 2)
-        rise = ease_out((u - .4) / .6)
-        for j, row in enumerate(mt):
-            for i, ch in enumerate(row):
-                if ch != " " and hsh(i, j) < rise:
-                    g.put(4 + i * CW_, FH - (7 - j) * LH * rise, ch, "a")
-        if u < 1.0:
-            for p in range(len(NAME)):
-                if NAME[p] == " ":
-                    continue
-                x0 = cx + (p - len(NAME) / 2 + .5) * 36
-                a = TAU * hsh(p, 71)
-                d = 700 * ease_out(u / .9)
-                g.put(x0 + math.cos(a) * d, cy + math.sin(a) * d * .6, NAME[p], "a")
-            burst(g, cx, cy, u, n=70, speed=650, col="a", seed=77)
-        sc = snap(u / .25)
-        extra += (f'<text x="{cx}" y="{cy + 22}" class="serif" font-size="{78 * max(.01, sc):.1f}" fill="{INK}" '
-                  f'text-anchor="middle">{NAME}</text>')
-        under = [(310 + 380 * j / 12, cy + 50 + math.sin(j * 1.1) * 2.4) for j in range(13)]
-        ink.line(under, w=FINE, smooth=True, k=ease_out((u - .25) / .3), color=BLUE)
-        for s_ in range(4):                       # a few last ink flecks
-            if .2 < u < .7:
-                splat(ink, cx + (s_ - 1.5) * 220, cy - 120 + 230 * (s_ % 2), 9 * (1 - (u - .2) * 1.6) + 1, s_ + 90)
-        shake = 6 * max(0, 1 - u * 4)
+    elif t < 5.9:                     # 6 · both claim the screen: hatching from the left, characters from the right
+        u = t - 4.9
+        edge = cx + 230 * math.sin(u * 8) * (1 - u * .4)
+        poly = [(10, 10), (edge, 10), (edge + 30 * math.sin(u * 30), FH / 2), (edge, FH - 10), (10, FH - 10)]
+        for p, q in stripes(poly, -.8, 20):
+            ink.line([p, q], w=THIN)
+        ink.line([(edge, 10), (edge + 30 * math.sin(u * 30), FH / 2), (edge, FH - 10)], w=LINE + 1, color=BLUE)
+        field(g, lambda x, y: x > edge + 18, t, dens=.38)
 
+    elif t < 6.9:                     # 7 · both race to write the name
+        u = t - 5.9
+        extra += (f'<text class="mono" x="{cx}" y="{cy - 40}" font-size="46" fill="{"#8f8e86"}" text-anchor="middle" '
+                  f'xml:space="preserve">{esc(scramble(NAME, u / .8, int(u * 24)))}</text>')
+        w = 620 * ease_out(u / .8)
+        extra += (f'<clipPath id="wc{int(t*FPS)}"><rect x="{cx - 310}" y="{cy}" width="{w:.0f}" height="110"/></clipPath>'
+                  f'<text x="{cx}" y="{cy + 80}" class="serif" font-size="70" fill="{INK}" text-anchor="middle" '
+                  f'clip-path="url(#wc{int(t*FPS)})">{NAME}</text>')
+        nx = cx - 310 + w
+        nib(ink, nx, cy + 70, -.6, 1.0)
+        rain(g, t, dens=.15)
+
+    else:                             # 8 · they merge: a glitch, and the name lands where the still will hold it
+        u = t - 6.9
+        flash = u < .09
+        off = int((1 - ease_out(u / .6)) * 40)
+        for s_ in range(6):
+            y0 = cy - 60 + s_ * 18
+            dx = (hsh(s_, int(u * 24)) - .5) * 2 * off
+            extra += (f'<clipPath id="gl{int(t*FPS)}{s_}"><rect x="0" y="{y0}" width="{FW}" height="18"/></clipPath>'
+                      f'<text x="{cx + dx:.1f}" y="{cy + 22}" class="serif" font-size="78" fill="{INK if s_ % 3 else BLUE}" '
+                      f'text-anchor="middle" clip-path="url(#gl{int(t*FPS)}{s_})">{NAME}</text>')
+        burst(g, cx, cy, u, n=60, speed=600, col="a", seed=77)
+        shake = 5 * max(0, 1 - u * 3)
     sx = (hsh(int(t * FPS), 1) - .5) * 2 * shake
     sy = (hsh(int(t * FPS), 2) - .5) * 2 * shake
     return g.svg(), ink.svg() + extra, (sx, sy), flash
 
 
+def name_ascii(seed=0):
+    """The name rasterised in Mowafy Serif and set again in characters."""
+    from PIL import Image as Im, ImageDraw, ImageFont
+    f = TTFont(os.path.join(FONTS, "MowafySerif-Regular.woff2"))
+    f.flavor = None
+    buf = io.BytesIO(); f.save(buf); buf.seek(0)
+    cols, rows, sx, sy = 150, 18, 3, 5
+    size = 100
+    while ImageFont.truetype(io.BytesIO(buf.getvalue()), size).getlength(NAME) > cols * sx * .97:
+        size -= 1
+    font = ImageFont.truetype(buf, size)
+    im = Im.new("L", (cols * sx, rows * sy), 0)
+    ImageDraw.Draw(im).text((cols * sx / 2, rows * sy * .52), NAME, font=font, fill=255, anchor="mm", stroke_width=1, stroke_fill=255)
+    px = im.load()
+    out = []
+    for j in range(rows):
+        line = ""
+        for i in range(cols):
+            v = sum(px[i * sx + a, j * sy + b] for a in range(sx) for b in range(sy)) / (255 * sx * sy)
+            line += (" .:-=+*#%@"[min(9, int(v * 12))] if v > .05 else
+                     ("." if hsh(i + seed * 31, j) < .03 else " "))
+        out.append(line)
+    return out, cols, rows
+
+
 def film():
-    n = int(T * FPS)
-    hold_from = int(10.6 * FPS)          # from here the name just boils: reuse a short cycle of drawings
-    css_frames, groups, cache = [], [], {}
+    n = int(INTRO * FPS)
+    css, groups = [], []
+    COMPACT[0] = True
     for i in range(n):
         t = i / FPS
-        key = i if i < hold_from else hold_from + (i - hold_from) % 6
-        cache.setdefault(key, []).append(i)
-    COMPACT[0] = True
-    for key, idxs in cache.items():
-        t = key / FPS
         a, ink, (sx, sy), flash = frame(t)
         body = a + ink
         if flash:
             body = f'<rect width="{FW}" height="{FH}" fill="{INK}"/><g style="filter:invert(1)">{body}</g>'
         if sx or sy:
             body = f'<g transform="translate({sx:.1f} {sy:.1f})">{body}</g>'
-        cls = f"q{key}"
-        stops = []
-        for i in idxs:
-            stops.append(f"{i / n * 100:.3f}%{{visibility:visible}}{(i + 1) / n * 100:.3f}%{{visibility:hidden}}")
-        css_frames.append(f"@keyframes {cls}{{0%{{visibility:hidden}}{''.join(stops)}100%{{visibility:hidden}}}}"
-                          f".{cls}{{animation:{cls} {T}s step-end infinite}}")
-        still = ' style="visibility:visible"' if key == hold_from else ""
-        groups.append(f'<g class="{cls} fr"{still}>{body}</g>')
+        css.append(f".q{i}{{animation:fr {1 / FPS:.4f}s step-end {t:.4f}s 1}}")
+        groups.append(f'<g class="fi q{i}">{body}</g>')
+    css.append("@keyframes fr{0%{visibility:visible}100%{visibility:hidden}}")
+
+    # ---------------- the still: the name holds for good, and every few seconds glitches into its ASCII self
+    cx, cy = FW / 2, FH / 2
+    SEED[0] = 500
+    under = [(310 + 380 * j / 12, cy + 50 + math.sin(j * 1.1) * 2.4) for j in range(13)]
+    boil = "".join(f'<g class="b b{b}">{draw(spline(under, False), b, w=FINE, color=BLUE)}</g>'
+                   for b in range(3) if not SEED.__setitem__(0, 500))
     COMPACT[0] = False
-    mono = CHARS + "@#%&*+=~^/\\<>01|" + NAME + "MOHAMEDWFY" + "".join(sorted(set(".:,'`-^")))
-    css = (font_face("MS", "MowafySerif-Regular.woff2", NAME)
-           + font_face("JM", "JetBrainsMono.woff2", mono + " .:-=+*#%@")
-           + ".serif{font-family:MS,Georgia,serif;letter-spacing:-.5px}"
-           + ".mono{font-family:JM,ui-monospace,monospace;white-space:pre}.fr{visibility:hidden}"
-           + f".L{{fill:none;stroke:{INK};stroke-linecap:round;stroke-linejoin:round}}"
-           + "".join(css_frames)
-           + "@media (prefers-reduced-motion:reduce){*{animation:none!important}}")
-    alt = ("A fast animated fight between ink drawings and ASCII characters: a pen slashes through falling "
-           "characters, a shield breaks under ASCII lightning, waves collide, a pen nib is chased by a character "
-           "snake, and it ends with the name Mohamed Mowafy.")
+    mt = mountains(COLS, 7, top=0, k=0)
+    sky = rows_text(mt, 4, FH - 7 * LH + 8, CS, LH, "#5d5c57")
+    art, acols, arows = name_ascii(0)
+    art2, _, _ = name_ascii(1)
+    acs = 7.6   # ASCII-art cell: a little larger than the ink name, so the switch reads
+    ax = cx - acols * acs * .6 / 2
+    ay = cy - arows * acs / 2 + acs * .2
+    art_svg = (f'<g class="ga">{rows_text(art, ax, ay, acs, acs, INK)}</g>'
+               f'<g class="ga2">{rows_text(art2, ax + 3, ay, acs, acs, BLUE, .45)}</g>')
+    slices = "".join(
+        f'<clipPath id="s{k}"><rect x="0" y="{cy - 62 + k * 16}" width="{FW}" height="16"/></clipPath>'
+        f'<text class="serif gs gs{k}" x="{cx}" y="{cy + 22}" font-size="78" fill="{BLUE if k % 2 else INK}" '
+        f'text-anchor="middle" clip-path="url(#s{k})">{NAME}</text>' for k in range(6))
+    P, D = 6.0, INTRO + 2.4   # glitch every P seconds, the first one D seconds in
+    css.append(
+        f"@keyframes inh{{from{{opacity:0}}to{{opacity:1}}}}.hold{{animation:inh .01s linear {INTRO - .02:.2f}s both}}"
+        # the ink name: gone while the ASCII art shows
+        f"@keyframes nm{{0%,30%{{opacity:1}}31%,72%{{opacity:0}}73%,100%{{opacity:1}}}}"
+        f".nm{{animation:nm {P * .25:.2f}s steps(1) {D}s infinite;animation-duration:{P}s}}"
+        # the ASCII art: in for most of a second, flickering between two drawings
+        f"@keyframes ga{{0%,31%{{opacity:0}}32%,71%{{opacity:1}}72%,100%{{opacity:0}}}}"
+        f".ga,.ga2{{opacity:0;animation:ga {P}s steps(1) {D}s infinite}}"
+        f"@keyframes gf{{0%,49%{{transform:translateX(0)}}50%,100%{{transform:translateX(-3px)}}}}"
+        f".ga2 text{{animation:gf .17s steps(1) infinite}}"
+        # torn slices on the way in and out
+        + "".join(f"@keyframes gs{k}{{0%,27%{{opacity:0;transform:none}}28%{{opacity:1;transform:translateX({(hsh(k, 1) - .5) * 60:.0f}px)}}"
+                  f"30%{{opacity:1;transform:translateX({(hsh(k, 2) - .5) * 90:.0f}px)}}32%,71%{{opacity:0}}"
+                  f"72%{{opacity:1;transform:translateX({(hsh(k, 3) - .5) * 80:.0f}px)}}74%,100%{{opacity:0;transform:none}}}}"
+                  f".gs{k}{{opacity:0;animation:gs{k} {P}s linear {D}s infinite}}" for k in range(6)))
+    # scale the glitch keyframes: the whole cycle is P seconds, the glitch about 2.4 s of it
+    hold = (f'<g class="hold">{sky}'
+            f'<text class="serif nm" x="{cx}" y="{cy + 22}" font-size="78" fill="{INK}" text-anchor="middle">{NAME}</text>'
+            f'{boil}{art_svg}{slices}</g>')
+    mono_t = CHARS + "@#%&*+=~^/\\<>01|█▀▌" + NAME + "MOHAMEDWFY" + " .:-=+*#%@" + "".join(art) + "".join(art2) + "".join(mt)
+    css_all = (font_face("MS", "MowafySerif-Regular.woff2", NAME)
+               + font_face("JM", "JetBrainsMono.woff2", mono_t)
+               + ".serif{font-family:MS,Georgia,serif;letter-spacing:-.5px}"
+               + ".mono{font-family:JM,ui-monospace,monospace;white-space:pre}.fi{visibility:hidden}"
+               + f".L{{fill:none;stroke:{INK};stroke-linecap:round;stroke-linejoin:round}}"
+               + "@keyframes bo{0%{visibility:visible}33.33%,100%{visibility:hidden}}"
+               + ".b{animation:bo .5s step-end infinite}.b1{animation-delay:-.3333s}.b2{animation-delay:-.1667s}"
+               + "".join(css)
+               + "@media (prefers-reduced-motion:reduce){*{animation:none!important}.fi,.b1,.b2,.ga,.ga2,.gs{display:none}}")
+    alt = ("Ink drawings and ASCII characters take turns stealing the frame, then the name Mohamed Mowafy stays, "
+           "now and then glitching into an ASCII version of itself.")
     return (f'<svg xmlns="http://www.w3.org/2000/svg" width="{FW}" height="{FH}" viewBox="0 0 {FW} {FH}" role="img" '
-            f'aria-label="{esc(alt)}"><title>Mohamed Mowafy</title><style>{css}</style>'
+            f'aria-label="{esc(alt)}"><title>Mohamed Mowafy</title><style>{css_all}</style>'
             f'<defs><clipPath id="stage"><rect width="{FW}" height="{FH}" rx="16"/></clipPath></defs>'
-            f'<g clip-path="url(#stage)"><rect width="{FW}" height="{FH}" fill="{BG}"/>{"".join(groups)}</g></svg>')
+            f'<g clip-path="url(#stage)"><rect width="{FW}" height="{FH}" fill="{BG}"/>{"".join(groups)}{hold}</g></svg>')
 
 
 # ------------------------------------------------------------------ cards: a designed picture of each project
@@ -780,8 +779,8 @@ def readme():
     cards = "".join(f'<a href="{c["url"]}"><img src="assets/card-{c["slug"]}.svg" width="423" '
                     f'alt="{c["name"]}: {c["desc"]}"></a>' for c in CARDS)
     return "\n".join([
-        '<a href="https://mohamedmowafy.com"><img src="assets/film.svg" width="100%" alt="A fast fight between ink '
-        'drawings and ASCII characters that ends with the name Mohamed Mowafy."></a>',
+        '<a href="https://mohamedmowafy.com"><img src="assets/film.svg" width="100%" alt="Ink and ASCII take turns '
+        'stealing the frame, then the name Mohamed Mowafy stays."></a>',
         "",
         f'<p align="center">{cards}</p>',
         "",

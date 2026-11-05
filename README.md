@@ -1,4 +1,4 @@
-<a href="https://mohamedmowafy.com"><img src="assets/film.svg" width="100%" alt="A fast fight between ink drawings and ASCII characters that ends with the name Mohamed Mowafy."></a>
+<a href="https://mohamedmowafy.com"><img src="assets/film.svg" width="100%" alt="Ink and ASCII take turns stealing the frame, then the name Mohamed Mowafy stays."></a>
 
 <p align="center"><a href="https://github.com/mowfxy/clem"><img src="assets/card-clem.svg" width="423" alt="Clem: A calm, local-first workspace."></a><a href="https://github.com/mowfxy/kern"><img src="assets/card-kern.svg" width="423" alt="Kern: Design taste for coding agents."></a></p>
 
