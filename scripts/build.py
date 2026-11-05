@@ -544,33 +544,68 @@ def frame(t):
         ink.line([(edge, 10), (edge + 30 * math.sin(u * 30), FH / 2), (edge, FH - 10)], w=LINE + 1, color=BLUE)
         field(g, lambda x, y: x > edge + 18, t, dens=.38)
 
-    elif t < 6.9:                     # 7 · both race to write the name
+    else:                             # 7 · the name: ASCII lays it down, the pen inks it over, the page settles
         u = t - 5.9
-        extra += (f'<text class="mono" x="{cx}" y="{cy - 40}" font-size="46" fill="{"#8f8e86"}" text-anchor="middle" '
-                  f'xml:space="preserve">{esc(scramble(NAME, u / .8, int(u * 24)))}</text>')
-        w = 620 * ease_out(u / .8)
-        extra += (f'<clipPath id="wc{int(t*FPS)}"><rect x="{cx - 310}" y="{cy}" width="{w:.0f}" height="110"/></clipPath>'
-                  f'<text x="{cx}" y="{cy + 80}" class="serif" font-size="70" fill="{INK}" text-anchor="middle" '
-                  f'clip-path="url(#wc{int(t*FPS)})">{NAME}</text>')
-        nx = cx - 310 + w
-        nib(ink, nx, cy + 70, -.6, 1.0)
-        rain(g, t, dens=.15)
-
-    else:                             # 8 · they merge: a glitch, and the name lands where the still will hold it
-        u = t - 6.9
-        flash = u < .09
-        off = int((1 - ease_out(u / .6)) * 40)
-        for s_ in range(6):
-            y0 = cy - 60 + s_ * 18
-            dx = (hsh(s_, int(u * 24)) - .5) * 2 * off
-            extra += (f'<clipPath id="gl{int(t*FPS)}{s_}"><rect x="0" y="{y0}" width="{FW}" height="18"/></clipPath>'
-                      f'<text x="{cx + dx:.1f}" y="{cy + 22}" class="serif" font-size="78" fill="{INK if s_ % 3 else BLUE}" '
-                      f'text-anchor="middle" clip-path="url(#gl{int(t*FPS)}{s_})">{NAME}</text>')
-        burst(g, cx, cy, u, n=60, speed=600, col="a", seed=77)
-        shake = 5 * max(0, 1 - u * 3)
+        art, ax, ay, acs, aw = ART()
+        fid = int(t * FPS)
+        if u < .5:                                    # the field from the last shot thins out
+            field(g, lambda x, y: hsh(int(x), int(y)) > u * 2, t, dens=.3 * (1 - u * 2))
+        # rows of the ASCII name slide in from alternate sides
+        rows = []
+        for j, row in enumerate(art):
+            dx = (1 if j % 2 else -1) * 700 * (1 - ease_out((u - j * .018) / .38))
+            rows.append(rows_text([row], ax + dx, ay + j * acs, acs, acs, INK if j % 5 else BLUE))
+        pen = ax - 20 + (aw + 40) * (lambda x: x * x * (3 - 2 * x))(max(0, min(1, (u - .55) / .7)))
+        extra += (f'<clipPath id="ca{fid}"><rect x="{pen + 4:.0f}" y="0" width="{FW}" height="{FH}"/></clipPath>'
+                  f'<g clip-path="url(#ca{fid})">{"".join(rows)}</g>')
+        if u > .55:
+            extra += (f'<clipPath id="ci{fid}"><rect x="0" y="0" width="{max(0, pen):.0f}" height="{FH}"/></clipPath>'
+                      f'<text x="{cx}" y="{NY}" class="serif" font-size="78" fill="{INK}" text-anchor="middle" '
+                      f'clip-path="url(#ci{fid})">{NAME}</text>')
+            if pen < ax + aw + 10:
+                for q in range(10):                    # characters scatter off the pen's edge
+                    yy = cy - 50 + hsh(q, fid) * 90
+                    g.put(pen + 10 + hsh(q, fid + 1) * 40, yy, "*.'`"[q % 4], "b" if q % 3 == 0 else "a")
+        if .5 < u < 1.4:
+            nib(ink, pen, cy + 6 + 8 * math.sin(u * 20), -.9, 1.1)
+        under = [(310 + 380 * j / 12, cy + 50 + math.sin(j * 1.1) * 2.4) for j in range(13)]
+        ink.line(under, w=FINE, smooth=True, k=ease_out((u - 1.2) / .3), color=BLUE)
+        rise = ease_out((u - 1.15) / .45)
+        if rise > 0:
+            extra += (f'<g transform="translate(0 {(1 - rise) * 130:.0f})" opacity="{rise:.2f}">'
+                      f'{rows_text(SKY(), 4, SKY_Y, CS, LH, "#5d5c57")}</g>')
+        lk = ease_out((u - 1.3) / .3)
+        if lk > 0:
+            extra += f'<g opacity="{lk:.2f}">{LINKS_SVG()}</g>'
     sx = (hsh(int(t * FPS), 1) - .5) * 2 * shake
     sy = (hsh(int(t * FPS), 2) - .5) * 2 * shake
     return g.svg(), ink.svg() + extra, (sx, sy), flash
+
+
+NY = FH / 2 + 22                     # the ink name's baseline
+SKY_Y = FH - 6 * LH + 8
+LINKS_TEXT = "mohamedmowafy.com   ·   m4labs.xyz"
+_cache = {}
+
+
+def ART():
+    if "art" not in _cache:
+        art, cols, rows = name_ascii(0)
+        acs = 7.6
+        aw = cols * acs * .6
+        _cache["art"] = (art, FW / 2 - aw / 2, FH / 2 - rows * acs / 2 + acs * .2, acs, aw)
+    return _cache["art"]
+
+
+def SKY():
+    if "sky" not in _cache:
+        _cache["sky"] = mountains(COLS, 7, top=0, k=0)
+    return _cache["sky"]
+
+
+def LINKS_SVG():
+    return (f'<text class="mono" x="{FW / 2}" y="{FH / 2 + 90}" font-size="16" fill="{SOFT}" text-anchor="middle" '
+            f'xml:space="preserve">{LINKS_TEXT}</text>')
 
 
 def name_ascii(seed=0):
@@ -621,13 +656,10 @@ def film():
     boil = "".join(f'<g class="b b{b}">{draw(spline(under, False), b, w=FINE, color=BLUE)}</g>'
                    for b in range(3) if not SEED.__setitem__(0, 500))
     COMPACT[0] = False
-    mt = mountains(COLS, 7, top=0, k=0)
-    sky = rows_text(mt, 4, FH - 7 * LH + 8, CS, LH, "#5d5c57")
-    art, acols, arows = name_ascii(0)
+    mt = SKY()
+    sky = rows_text(mt, 4, SKY_Y, CS, LH, "#5d5c57") + LINKS_SVG()
+    art, ax, ay, acs, _ = ART()
     art2, _, _ = name_ascii(1)
-    acs = 7.6   # ASCII-art cell: a little larger than the ink name, so the switch reads
-    ax = cx - acols * acs * .6 / 2
-    ay = cy - arows * acs / 2 + acs * .2
     art_svg = (f'<g class="ga">{rows_text(art, ax, ay, acs, acs, INK)}</g>'
                f'<g class="ga2">{rows_text(art2, ax + 3, ay, acs, acs, BLUE, .45)}</g>')
     slices = "".join(
@@ -652,9 +684,9 @@ def film():
                   f".gs{k}{{opacity:0;animation:gs{k} {P}s linear {D}s infinite}}" for k in range(6)))
     # scale the glitch keyframes: the whole cycle is P seconds, the glitch about 2.4 s of it
     hold = (f'<g class="hold">{sky}'
-            f'<text class="serif nm" x="{cx}" y="{cy + 22}" font-size="78" fill="{INK}" text-anchor="middle">{NAME}</text>'
+            f'<text class="serif nm" x="{cx}" y="{NY}" font-size="78" fill="{INK}" text-anchor="middle">{NAME}</text>'
             f'{boil}{art_svg}{slices}</g>')
-    mono_t = CHARS + "@#%&*+=~^/\\<>01|█▀▌" + NAME + "MOHAMEDWFY" + " .:-=+*#%@" + "".join(art) + "".join(art2) + "".join(mt)
+    mono_t = CHARS + "@#%&*+=~^/\\<>01|█▀▌" + NAME + "MOHAMEDWFY" + " .:-=+*#%@" + "".join(art) + "".join(art2) + "".join(mt) + LINKS_TEXT
     css_all = (font_face("MS", "MowafySerif-Regular.woff2", NAME)
                + font_face("JM", "JetBrainsMono.woff2", mono_t)
                + ".serif{font-family:MS,Georgia,serif;letter-spacing:-.5px}"
@@ -784,7 +816,8 @@ def readme():
         "",
         f'<p align="center">{cards}</p>',
         "",
-        '<p align="center"><a href="https://mohamedmowafy.com">mohamedmowafy.com</a></p>',
+        '<p align="center"><a href="https://mohamedmowafy.com">mohamedmowafy.com</a> &nbsp;·&nbsp; '
+        '<a href="https://m4labs.xyz">M4 Labs</a></p>',
         "",
         "<!-- Generated by scripts/build.py. Set in Mowafy Serif, Mowafy Sans and JetBrains Mono. -->",
         "",
