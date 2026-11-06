@@ -4,8 +4,11 @@ The banner is a short looping film in Clem's ink: an ivory pen line that wanders
 colour spot per shot, poses that snap with a small overshoot. It is plain SVG + CSS, so GitHub plays it in an <img>.
 The project cards are still pictures.
 
-    pip install fonttools brotli
-    python3 scripts/build.py      # CLEM=../clem KERN=../kern to point at the repos the pictures come from
+Type comes from the font repos, cloned next to this one: Mowafy Serif (github.com/mowfxy/serif; the Display
+cut for the name and titles) and Mowafy Sans (github.com/mowfxy/sans). JetBrains Mono comes from Clem.
+
+    pip install fonttools brotli pillow
+    python3 scripts/build.py      # MOWAFY_SERIF, MOWAFY_SANS, CLEM, KERN override the sibling paths
 """
 import base64, io, math, os, re
 from fontTools import subset
@@ -16,7 +19,16 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "..", "assets")
 CLEM = os.environ.get("CLEM", os.path.join(HERE, "../../clem"))
 KERN = os.environ.get("KERN", os.path.join(HERE, "../../kern"))
-FONTS = os.environ.get("MOWAFY_FONTS", os.path.join(CLEM, "public/fonts"))
+SERIF_DIR = os.environ.get("MOWAFY_SERIF", os.path.join(HERE, "../../serif/fonts"))   # github.com/mowfxy/serif
+SANS_DIR = os.environ.get("MOWAFY_SANS", os.path.join(HERE, "../../sans/fonts/woff2"))  # github.com/mowfxy/sans
+FONT_DIRS = [SERIF_DIR, SANS_DIR, os.path.join(CLEM, "public/fonts")]                   # JetBrains Mono from Clem
+
+
+def font_path(file):
+    for d in FONT_DIRS:
+        if os.path.exists(os.path.join(d, file)):
+            return os.path.join(d, file)
+    raise FileNotFoundError(f"{file} not found in {FONT_DIRS}")
 
 BG, CARD, RULE = "#141413", "#1a1a18", "#2b2b28"
 INK, SOFT, MUTE = "#f0efeb", "#b5b4ad", "#85847e"
@@ -30,7 +42,7 @@ def esc(s):
 
 
 def font_face(family, file, text):
-    f = TTFont(os.path.join(FONTS, file))
+    f = TTFont(font_path(file))
     o = subset.Options()
     o.flavor, o.layout_features, o.name_IDs, o.hinting = "woff2", ["kern", "liga"], [], False
     s = subset.Subsetter(o)
@@ -611,7 +623,7 @@ def LINKS_SVG():
 def name_ascii(seed=0):
     """The name rasterised in Mowafy Serif and set again in characters."""
     from PIL import Image as Im, ImageDraw, ImageFont
-    f = TTFont(os.path.join(FONTS, "MowafySerif-Regular.woff2"))
+    f = TTFont(font_path("MowafySerifDisplay-Regular.woff2"))
     f.flavor = None
     buf = io.BytesIO(); f.save(buf); buf.seek(0)
     cols, rows, sx, sy = 150, 18, 3, 5
@@ -687,7 +699,7 @@ def film():
             f'<text class="serif nm" x="{cx}" y="{NY}" font-size="78" fill="{INK}" text-anchor="middle">{NAME}</text>'
             f'{boil}{art_svg}{slices}</g>')
     mono_t = CHARS + "@#%&*+=~^/\\<>01|█▀▌" + NAME + "MOHAMEDWFY" + " .:-=+*#%@" + "".join(art) + "".join(art2) + "".join(mt) + LINKS_TEXT
-    css_all = (font_face("MS", "MowafySerif-Regular.woff2", NAME)
+    css_all = (font_face("MS", "MowafySerifDisplay-Regular.woff2", NAME)
                + font_face("JM", "JetBrainsMono.woff2", mono_t)
                + ".serif{font-family:MS,Georgia,serif;letter-spacing:-.5px}"
                + ".mono{font-family:JM,ui-monospace,monospace;white-space:pre}.fi{visibility:hidden}"
@@ -738,29 +750,37 @@ def clem_art(x, y, w, h):
 
 def kern_art(x, y, w, h):
     """A kerning spec sheet: K and n set tight, their side-bearings in red and the pair's value."""
-    size, upm = 128, 1000
+    from fontTools.pens.boundsPen import BoundsPen
+    f = TTFont(font_path("MowafySerifDisplay-Bold.woff2"))
+    gs, cm = f.getGlyphSet(), f.getBestCmap()
+    box = {}
+    for c in "Kn":
+        bp = BoundsPen(gs); gs[cm[ord(c)]].draw(bp); box[c] = bp.bounds
+    upm = f["head"].unitsPerEm
+    xh, cap = f["OS/2"].sxHeight, f["OS/2"].sCapHeight
+    size = 128
     k_ = size / upm
     kern = -64
-    kadv, kxmax, nxmin, nxmax = 818, 809, 16, 653
+    kadv, nxmax = f["hmtx"][cm[ord("K")]][0], box["n"][2]
     total = (kadv + kern + nxmax) * k_
     bx = x + (w - total) / 2
     base = y + h * .74
     nx = bx + (kadv + kern) * k_
     out = [f'<rect x="{x}" y="{y}" width="{w}" height="{h}" fill="#121214"/>']
-    for yy, dash in ((base, ""), (base - 540 * k_, ' stroke-dasharray="3 4"'), (base - 720 * k_, ' stroke-dasharray="3 4"')):
+    for yy, dash in ((base, ""), (base - xh * k_, ' stroke-dasharray="3 4"'), (base - cap * k_, ' stroke-dasharray="3 4"')):
         out.append(f'<line x1="{x}" y1="{yy:.1f}" x2="{x + w}" y2="{yy:.1f}" stroke="#34343a"{dash}/>')
     out.append(f'<text class="serifb" x="{bx:.1f}" y="{base:.1f}" font-size="{size}" fill="{INK}">K</text>')
     out.append(f'<text class="serifb" x="{nx:.1f}" y="{base:.1f}" font-size="{size}" fill="{INK}">n</text>')
     l1, l2 = bx + kadv * k_, nx  # where n would sit, and where kerning puts it
     for lx in (l1, l2):
-        out.append(f'<line x1="{lx:.1f}" y1="{base - 760 * k_:.1f}" x2="{lx:.1f}" y2="{base + 14:.1f}" '
+        out.append(f'<line x1="{lx:.1f}" y1="{base - (cap + 40) * k_:.1f}" x2="{lx:.1f}" y2="{base + 14:.1f}" '
                    f'stroke="{RED}" stroke-width="1.2"/>')
     mid = (l1 + l2) / 2
     out.append(f'<path d="M{min(l1, l2):.1f} {base + 22:.1f}H{max(l1, l2):.1f}" stroke="{RED}" stroke-width="1.2"/>')
     out.append(f'<text class="mono" x="{mid:.1f}" y="{base + 40:.1f}" font-size="11" fill="{RED}" '
                f'text-anchor="middle">{kern}</text>')
-    labels = [("K/n", x + 14, y + 22, "start"), ("x-height", x + w - 14, base - 540 * k_ - 5, "end"),
-              ("cap", x + w - 14, base - 720 * k_ - 5, "end"), ("baseline", x + w - 14, base - 5, "end")]
+    labels = [("K/n", x + 14, y + 22, "start"), ("x-height", x + w - 14, base - xh * k_ - 5, "end"),
+              ("cap", x + w - 14, base - cap * k_ - 5, "end"), ("baseline", x + w - 14, base - 5, "end")]
     for t, lx, ly, an in labels:
         out.append(f'<text class="mono" x="{lx:.1f}" y="{ly:.1f}" font-size="9.5" fill="#6d6d74" '
                    f'text-anchor="{an}">{t}</text>')
@@ -770,7 +790,7 @@ def kern_art(x, y, w, h):
 def m4_art(x, y, w, h):
     """M4 Labs: its M4 set in characters, the labs pill in ink, and a lens reading a field of characters."""
     from PIL import Image as Im, ImageDraw, ImageFont
-    f = TTFont(os.path.join(FONTS, "MowafySans-Bold.woff2"))
+    f = TTFont(font_path("MowafySans-Bold.woff2"))
     f.flavor = None
     buf = io.BytesIO(); f.save(buf)
     fs, cols, rows, sx, sy = 7.5, 60, 20, 3, 5
@@ -818,11 +838,12 @@ def card(name, desc, art, W=423):
     cw, ch = W - 10, H - 8
     pw, ph = cw - 20, H - 98
     body, serif_t, sans_t, mono_t = art(15, 10, pw, ph)
-    css = (font_face("MS", "MowafySerif-Regular.woff2", name + serif_t)
+    css = (font_face("MD", "MowafySerifDisplay-Regular.woff2", name)
+           + (font_face("MS", "MowafySerif-Regular.woff2", serif_t) if serif_t else "")
            + font_face("MN", "MowafySans-Regular.woff2", desc + sans_t + "↗")
-           + (font_face("MB", "MowafySerif-Bold.woff2", "Kn") if name == "Kern" else "")
+           + (font_face("MB", "MowafySerifDisplay-Bold.woff2", "Kn") if name == "Kern" else "")
            + font_face("JM", "JetBrainsMono.woff2", mono_t)
-           + ".serif{font-family:MS,Georgia,serif}.serifb{font-family:MB,Georgia,serif;font-weight:700}"
+           + ".disp{font-family:MD,Georgia,serif}.serif{font-family:MS,Georgia,serif}.serifb{font-family:MB,Georgia,serif;font-weight:700}"
            + ".sans{font-family:MN,system-ui,sans-serif}.mono{font-family:JM,ui-monospace,monospace;white-space:pre}")
     return (f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" viewBox="0 0 {W} {H}" role="img" '
             f'aria-label="{esc(name)}: {esc(desc)}"><title>{esc(name)}</title><style>{css}</style>'
@@ -830,7 +851,7 @@ def card(name, desc, art, W=423):
             f'<rect x="5.5" y=".5" width="{cw-1}" height="{ch-1}" rx="14" fill="{CARD}" stroke="{RULE}"/>'
             f'<g clip-path="url(#p)">{body}</g>'
             f'<rect x="15.5" y="10.5" width="{pw-1}" height="{ph-1}" rx="10" fill="none" stroke="{RULE}"/>'
-            f'<text class="serif" x="24" y="{ph+48}" font-size="26" fill="{INK}">{esc(name)}</text>'
+            f'<text class="disp" x="24" y="{ph+48}" font-size="26" fill="{INK}">{esc(name)}</text>'
             f'<text class="sans" x="{cw-6}" y="{ph+46}" font-size="18" fill="{MUTE}" text-anchor="end">↗</text>'
             f'<text class="sans" x="24" y="{ph+72}" font-size="14" fill="{SOFT}">{esc(desc)}</text></svg>')
 
